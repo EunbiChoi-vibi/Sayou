@@ -1096,6 +1096,29 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
     // 이미 구글에 연결된(googleEventId가 있는) 로컬 일정들의 key — 이미 다 커버된 내용이라 또 만들 필요 없어요
     const coveredKeys = new Set(allTasksFlat.filter((t) => t.googleEventId).map(taskKey));
 
+    // 이미 연결된 일정의 날짜(또는 내용)가 로컬에서 바뀌었으면, 새로 만들지 않고 구글 쪽 이벤트를 그대로 수정합니다.
+    const existingById = new Map((existing.items || []).map((ev) => [ev.id, ev]));
+    let updated = 0;
+    for (const t of allTasksFlat.filter((x) => x.googleEventId)) {
+      const ev = existingById.get(t.googleEventId);
+      if (!ev || ev.status === "cancelled") continue; // 지금 조회 기간 밖이거나 이미 삭제됨 — 이번 회차에서는 건드리지 않아요
+      const expectedSummary = t.__project ? `[${t.__project}][${t.type}] ${t.label}` : `[${t.type}] ${t.label}`;
+      const expectedStart = t.date;
+      const expectedEndExclusive = addDaysStr(t.endDate || t.date, 1);
+      const actualStart = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.slice(0, 10) : null);
+      const actualEndExclusive = ev.end?.date || (ev.end?.dateTime ? ev.end.dateTime.slice(0, 10) : null);
+      if (ev.summary === expectedSummary && actualStart === expectedStart && actualEndExclusive === expectedEndExclusive) continue;
+      await gcalFetch(`calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(t.googleEventId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          summary: expectedSummary,
+          start: { date: expectedStart },
+          end: { date: expectedEndExclusive },
+        }),
+      });
+      updated++;
+    }
+
     function linkLocal(pName, taskId, patch) {
       if (isMulti) {
         setAllSchedules((prev) => {
@@ -1138,7 +1161,7 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
       coveredKeys.add(key);
       count++;
     }
-    return { count, pushedEventIds, skippedDuplicates };
+    return { count, pushedEventIds, skippedDuplicates, updated };
   }
 
   async function pullEvents(justPushedIds) {
@@ -1218,11 +1241,12 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
     setIsSyncing(true);
     if (!silent) setSyncStatus({ type: "idle", text: "동기화 중..." });
     try {
-      const { count: pushed, pushedEventIds, skippedDuplicates } = await pushTasks();
+      const { count: pushed, pushedEventIds, skippedDuplicates, updated } = await pushTasks();
       const pulled = await pullEvents(pushedEventIds);
       const now = new Date().toLocaleTimeString("ko-KR");
       const dupText = skippedDuplicates > 0 ? ` · 중복 제외 ${skippedDuplicates}건` : "";
-      setSyncStatus({ type: "ok", text: `✓ ${now} 동기화 완료 (내보냄 ${pushed}건 · 가져옴 ${pulled}건${dupText})` });
+      const updText = updated > 0 ? ` · 수정 ${updated}건` : "";
+      setSyncStatus({ type: "ok", text: `✓ ${now} 동기화 완료 (내보냄 ${pushed}건 · 가져옴 ${pulled}건${updText}${dupText})` });
     } catch (err) {
       setSyncStatus({ type: "err", text: err.message || "동기화 중 오류가 발생했습니다." });
     } finally {
@@ -1282,7 +1306,7 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
         )}
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: DASH.inkFaint, lineHeight: 1.5 }}>
-        정해둔 기간 범위 안에서 모든 프로젝트의 일정을 서로 없는 것만 주고받습니다. 연결되어 있는 동안 30초마다 변경 여부를 확인해서, 바뀐 게 있을 때만 자동으로 동기화해요. 브라우저 세션마다 다시 로그인이 필요해요.
+        정해둔 기간 범위 안에서 모든 프로젝트의 일정을 서로 없는 것만 주고받고, 이미 연동된 일정의 날짜가 바뀌면 구글 쪽 이벤트도 함께 수정됩니다. 연결되어 있는 동안 30초마다 변경 여부를 확인해서, 바뀐 게 있을 때만 자동으로 동기화해요. 브라우저 세션마다 다시 로그인이 필요해요.
       </div>
     </Card>
   );
