@@ -4832,7 +4832,9 @@ function ConsultPage({ onBack }) {
     const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
     const justPushedIds = [];
     for (const e of current.entries) {
-      if (!e.notionPageId && !linkedPageId) { blocked++; continue; }
+      // linkedPageId를 아직 못 구했으면(연결 조회가 안 끝났거나 실패한 순간) 절대 쓰지 않아요 —
+      // 이미 연결된 항목을 업데이트할 때도 마찬가지로 건너뜁니다. 안 그러면 관계값이 빈 값으로 덮어써질 수 있어요.
+      if (!linkedPageId) { blocked++; continue; }
       const props = {
         "이름": notionTitleProp(`${projectName} 상담 (${e.date})`),
         "프로젝트명 1": notionRelationProp(linkedPageId),
@@ -4964,7 +4966,9 @@ function MeasurePage({ onBack }) {
     const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
     const justPushedIds = [];
     for (const e of current.entries) {
-      if (!e.notionPageId && !linkedPageId) { blocked++; continue; }
+      // linkedPageId를 아직 못 구했으면(연결 조회가 안 끝났거나 실패한 순간) 절대 쓰지 않아요 —
+      // 이미 연결된 항목을 업데이트할 때도 마찬가지로 건너뜁니다. 안 그러면 관계값이 빈 값으로 덮어써질 수 있어요.
+      if (!linkedPageId) { blocked++; continue; }
       const props = {
         "이름": notionTitleProp(`${projectName} 실측 (${e.date})`),
         "프로젝트 목록": notionRelationProp(linkedPageId),
@@ -5326,7 +5330,9 @@ function EstimatePage({ onBack }) {
     const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
     const justPushedIds = [];
     for (const e of current.entries) {
-      if (!e.notionPageId && !linkedPageId) { blocked++; continue; }
+      // linkedPageId를 아직 못 구했으면(연결 조회가 안 끝났거나 실패한 순간) 절대 쓰지 않아요 —
+      // 이미 연결된 항목을 업데이트할 때도 마찬가지로 건너뜁니다. 안 그러면 관계값이 빈 값으로 덮어써질 수 있어요.
+      if (!linkedPageId) { blocked++; continue; }
       const props = {
         "이름": notionTitleProp(e.title),
         "프로젝트명 1": notionRelationProp(linkedPageId),
@@ -5467,7 +5473,9 @@ function ContractPage({ onBack }) {
     const checklistSummary = `${current.checklist.filter((c) => c.done).length}/${current.checklist.length} 완료`;
     const justPushedIds = [];
     for (const e of current.entries) {
-      if (!e.notionPageId && !linkedPageId) { blocked++; continue; }
+      // linkedPageId를 아직 못 구했으면(연결 조회가 안 끝났거나 실패한 순간) 절대 쓰지 않아요 —
+      // 이미 연결된 항목을 업데이트할 때도 마찬가지로 건너뜁니다. 안 그러면 관계값이 빈 값으로 덮어써질 수 있어요.
+      if (!linkedPageId) { blocked++; continue; }
       const props = {
         "이름": notionTitleProp(`${projectName} 계약 (${e.date})`),
         "프로젝트명 1": notionRelationProp(linkedPageId),
@@ -5624,7 +5632,8 @@ function ConstructionPage({ onBack }) {
     for (const trade of STANDARD_PROCESS_TYPES) {
       const items = current.checklist[trade] || [];
       for (const it of items) {
-        if (!it.notionPageId && !linkedPageId) { blocked++; continue; }
+        // linkedPageId를 아직 못 구했으면 이미 연결된 항목이라도 절대 쓰지 않아요(관계값이 빈 값으로 덮어써지는 것 방지)
+        if (!linkedPageId) { blocked++; continue; }
         const props = {
           "이름": notionTitleProp(it.label),
           "프로젝트명": notionRelationProp(linkedPageId),
@@ -5670,7 +5679,8 @@ function ConstructionPage({ onBack }) {
     const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
     const justPushedIds = [];
     for (const x of current.improvements) {
-      if (!x.notionPageId && !linkedPageId) { blocked++; continue; }
+      // linkedPageId를 아직 못 구했으면 이미 연결된 항목이라도 절대 쓰지 않아요(관계값이 빈 값으로 덮어써지는 것 방지)
+      if (!linkedPageId) { blocked++; continue; }
       const props = {
         "이름": notionTitleProp(x.issue),
         "프로젝트명": notionRelationProp(linkedPageId),
@@ -5862,7 +5872,9 @@ function AsPage({ onBack }) {
     const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
     const justPushedIds = [];
     for (const e of current.entries) {
-      if (!e.notionPageId && !linkedPageId) { blocked++; continue; }
+      // linkedPageId를 아직 못 구했으면(연결 조회가 안 끝났거나 실패한 순간) 절대 쓰지 않아요 —
+      // 이미 연결된 항목을 업데이트할 때도 마찬가지로 건너뜁니다. 안 그러면 관계값이 빈 값으로 덮어써질 수 있어요.
+      if (!linkedPageId) { blocked++; continue; }
       if (e.type) await notionEnsureSelectOption(workerUrl, databaseId, "공정", e.type);
       const props = {
         "AS사항": notionTitleProp(`${projectName} - ${e.title}`),
