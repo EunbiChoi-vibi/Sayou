@@ -2420,6 +2420,7 @@ function Sidebar({ onNavigate }) {
   const mainItems = [
     { key: "dashboard", label: "대시보드" },
     { key: "projectSchedule", label: "프로젝트별 공정표" },
+    { key: "deposits", label: "입금 현황" },
     { key: "payments", label: "결제 확인 필요 목록" },
     { key: "schedule", label: "일정 · 공정표" },
     { key: "toolkit", label: "자재 물량 · 견적 계산기" },
@@ -5173,6 +5174,243 @@ function EstimatePage({ onBack }) {
   );
 }
 
+/* ============================================================================
+   입금 현황 — 프로젝트별 계약보증금·착공금·중도금·잔금 관리
+   노션 "입금 현황" DB와 연동됩니다. 화면에서 금액·입금예정일·상태·숨김을 바꾸면
+   그 즉시 해당 필드만 노션에 반영되고(항목이 없으면 새로 만듭니다), 그 외에는
+   60초마다 노션 → 대시보드로 다시 불러옵니다.
+   ============================================================================ */
+
+const NOTION_DB_DEPOSITS = "ce4eb1355f3847998f72f2f6cef8288f";
+const DEPOSIT_TYPES = ["계약 보증금", "착공금", "중도금", "잔금"];
+
+function DepositRow({ type, entry, onCommit }) {
+  const [amount, setAmount] = useState(entry ? String(entry.amount || "") : "");
+  const [dueDate, setDueDate] = useState((entry && entry.dueDate) || "");
+
+  useEffect(() => { setAmount(entry ? String(entry.amount || "") : ""); }, [entry && entry.amount]);
+  useEffect(() => { setDueDate((entry && entry.dueDate) || ""); }, [entry && entry.dueDate]);
+
+  const status = (entry && entry.status) || "미입금";
+  const isHidden = !!(entry && entry.hidden);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}`, opacity: isHidden ? 0.5 : 1, flexWrap: "wrap" }}>
+      <div style={{ minWidth: 88, fontSize: 13, fontWeight: 700, color: DASH.navy }}>{type}</div>
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        onBlur={() => { if (Number(amount) !== ((entry && entry.amount) || 0)) onCommit(type, { amount: Number(amount) || 0 }); }}
+        placeholder="금액 (원)"
+        style={{ ...stageInputStyle, width: 140 }}
+      />
+      <input
+        type="date"
+        value={dueDate}
+        onChange={(e) => { setDueDate(e.target.value); onCommit(type, { dueDate: e.target.value }); }}
+        style={{ ...stageInputStyle, width: 150 }}
+      />
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={() => onCommit(type, { status: "미입금" })} style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 12px", borderRadius: 100, border: `1px solid ${status === "미입금" ? DASH.red : DASH.line}`, background: status === "미입금" ? DASH.redSoft : DASH.surface, color: status === "미입금" ? DASH.red : DASH.inkSoft, cursor: "pointer" }}>미입금</button>
+        <button onClick={() => onCommit(type, { status: "입금완료" })} style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 12px", borderRadius: 100, border: `1px solid ${status === "입금완료" ? DASH.teal : DASH.line}`, background: status === "입금완료" ? DASH.tealSoft : DASH.surface, color: status === "입금완료" ? DASH.teal : DASH.inkSoft, cursor: "pointer" }}>입금완료</button>
+      </div>
+      {status === "미입금" && (
+        <button onClick={() => onCommit(type, { hidden: !isHidden })} style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: "transparent", color: DASH.inkFaint, cursor: "pointer" }}>
+          {isHidden ? "숨김 해제" : "숨기기"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DepositStatusPage({ onBack }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [notionError, setNotionError] = useState("");
+  const [dbId, setDbId] = useState(NOTION_DB_DEPOSITS);
+  const [workerUrl, setWorkerUrl] = useState(DEFAULT_WORKER_URL);
+  const [syncStatus, setSyncStatus] = useState({ type: "idle", text: "" });
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showHidden, setShowHidden] = useState(false);
+
+  const pipelineLookup = usePipelineLookup();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r1 = await window.storage.get("interior-dashboard-notion-worker-url-v1", true);
+        if (r1 && r1.value) setWorkerUrl(r1.value);
+      } catch (e) {}
+      try {
+        const r2 = await window.storage.get("interior-dashboard-notion-db-deposits-v1", true);
+        if (r2 && r2.value) setDbId(r2.value);
+      } catch (e) {}
+    })();
+  }, []);
+
+  async function fetchEntries() {
+    if (!workerUrl || !dbId || !pipelineLookup.ready) return;
+    setLoading(true);
+    setNotionError("");
+    try {
+      const result = await notionQueryDatabase(workerUrl, dbId, { page_size: 100 });
+      const items = (result.results || []).map((page) => {
+        const props = page.properties;
+        const relatedIds = (props["프로젝트명 1"]?.relation || []).map((r) => r.id);
+        const projectPageId = relatedIds[0] || "";
+        const pName = relatedIds.map((id) => pipelineLookup.nameByPageId.get(id)).find(Boolean) || "";
+        const range = notionDateValue(props["입금예정일"]);
+        return {
+          notionPageId: page.id,
+          projectPageId,
+          projectName: pName,
+          type: props["구분"]?.select?.name || "",
+          amount: Number(notionPlainText(props["금액"])) || 0,
+          dueDate: range ? range.start.slice(0, 10) : "",
+          status: props["상태"]?.select?.name || "미입금",
+          hidden: !!props["숨김"]?.checkbox,
+        };
+      });
+      setEntries(items);
+      setSyncStatus({ type: "ok", text: `Notion 동기화됨 · ${new Date().toLocaleTimeString("ko-KR")}` });
+    } catch (err) {
+      setNotionError(`조회 오류: ${err.message || "알 수 없는 오류"}`);
+      setSyncStatus({ type: "err", text: `Notion 오류: ${(err && err.message) || "동기화 실패"}` });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchEntries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workerUrl, dbId, pipelineLookup.ready]);
+
+  useEffect(() => {
+    const t = setInterval(fetchEntries, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workerUrl, dbId, pipelineLookup.ready]);
+
+  const depositSync = {
+    status: syncStatus,
+    configured: !!(workerUrl && dbId),
+    retryNow: fetchEntries,
+  };
+
+  async function commitField(type, patch) {
+    const linkedPageId = pipelineLookup.pageIdByName.get(selectedProject);
+    const existing = entries.find((e) => e.projectName === selectedProject && e.type === type);
+    const merged = { projectName: selectedProject, projectPageId: linkedPageId, type, amount: 0, dueDate: "", status: "미입금", hidden: false, ...existing, ...patch };
+
+    setEntries((prev) => {
+      const idx = prev.findIndex((e) => e.projectName === selectedProject && e.type === type);
+      if (idx === -1) return [...prev, merged];
+      const next = [...prev];
+      next[idx] = merged;
+      return next;
+    });
+
+    if (!linkedPageId) return; // 프로젝트가 노션 "프로젝트 목록"과 연결 안 됐으면 쓰기를 건너뜁니다
+
+    const props = {};
+    if (patch.amount !== undefined) props["금액"] = notionNumberProp(merged.amount);
+    if (patch.dueDate !== undefined) props["입금예정일"] = merged.dueDate ? notionDateRangeProp(merged.dueDate, merged.dueDate) : { date: null };
+    if (patch.status !== undefined) props["상태"] = notionSelectProp(merged.status);
+    if (patch.hidden !== undefined) props["숨김"] = { checkbox: merged.hidden };
+
+    if (existing && existing.notionPageId) {
+      await notionUpdatePageSafe(workerUrl, existing.notionPageId, props);
+    } else {
+      const page = await notionCreatePage(workerUrl, dbId, {
+        "이름": notionTitleProp(`${selectedProject} - ${type}`),
+        "프로젝트명 1": notionRelationProp(linkedPageId),
+        "구분": notionSelectProp(type),
+        "금액": notionNumberProp(merged.amount),
+        "입금예정일": merged.dueDate ? notionDateRangeProp(merged.dueDate, merged.dueDate) : { date: null },
+        "상태": notionSelectProp(merged.status),
+        "숨김": { checkbox: merged.hidden },
+      });
+      setEntries((prev) => prev.map((e) => (e.projectName === selectedProject && e.type === type ? { ...e, notionPageId: page.id } : e)));
+    }
+  }
+
+  const projectEntries = selectedProject ? entries.filter((e) => e.projectName === selectedProject) : [];
+  const visibleTypes = DEPOSIT_TYPES.filter((t) => !(projectEntries.find((e) => e.type === t) || {}).hidden);
+  const hiddenTypes = DEPOSIT_TYPES.filter((t) => (projectEntries.find((e) => e.type === t) || {}).hidden);
+
+  return (
+    <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px 60px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <StageHeader
+            onBack={selectedProject ? () => setSelectedProject(null) : onBack}
+            eyebrow="Deposits"
+            title={selectedProject ? `${selectedProject} · 입금 현황` : "입금 현황"}
+            desc={selectedProject ? "계약 보증금·착공금·중도금·잔금의 금액·입금예정일·상태를 관리하세요. 바꾸면 바로 노션에 반영됩니다." : "프로젝트 카드를 선택하면 입금 항목을 확인·수정할 수 있어요."}
+          />
+        </div>
+
+        <div style={{ marginBottom: 14 }}><NotionStatusBadge sync={depositSync} /></div>
+
+        {notionError && (
+          <Card style={{ padding: 12, marginBottom: 14, borderLeft: `3px solid ${DASH.red}` }}>
+            <div style={{ fontSize: 12.5, color: DASH.red }}>{notionError}</div>
+            <div style={{ fontSize: 11, color: DASH.inkFaint, marginTop: 6 }}>우측 상단 ⚙ 에서 Notion 설정을 확인해주세요.</div>
+          </Card>
+        )}
+
+        {!selectedProject && (
+          loading && pipelineLookup.sites.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>조회 중...</div>
+          ) : pipelineLookup.sites.length === 0 ? (
+            <Card style={{ padding: 0 }}>
+              <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>등록된 프로젝트가 없습니다. Notion "프로젝트 목록"에서 추가하세요.</div>
+            </Card>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
+              {pipelineLookup.sites.map((site) => {
+                const siteEntries = entries.filter((e) => e.projectName === site.name);
+                const unpaidTotal = siteEntries.filter((e) => e.status !== "입금완료" && !e.hidden).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+                return (
+                  <button
+                    key={site.id}
+                    onClick={() => setSelectedProject(site.name)}
+                    style={{ textAlign: "left", padding: 16, borderRadius: 12, border: `1px solid ${DASH.line}`, background: DASH.surface, cursor: "pointer" }}
+                  >
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: DASH.ink, marginBottom: 10 }}>{site.name}</div>
+                    <div style={{ fontSize: 10.5, color: DASH.inkFaint, marginBottom: 4 }}>미입금 총액</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: unpaidTotal > 0 ? DASH.red : DASH.teal, fontFamily: "'Noto Serif KR', serif" }}>{unpaidTotal.toLocaleString("ko-KR")}원</div>
+                  </button>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {selectedProject && (
+          <Card style={{ padding: 0 }}>
+            {visibleTypes.map((type) => (
+              <DepositRow key={type} type={type} entry={projectEntries.find((e) => e.type === type)} onCommit={commitField} />
+            ))}
+            {hiddenTypes.length > 0 && (
+              <div style={{ padding: "10px 16px" }}>
+                <button onClick={() => setShowHidden((v) => !v)} style={{ fontSize: 11.5, fontWeight: 600, color: DASH.inkFaint, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  {showHidden ? "숨긴 항목 접기 ▲" : `숨긴 항목 보기 (${hiddenTypes.length}) ▼`}
+                </button>
+              </div>
+            )}
+            {showHidden && hiddenTypes.map((type) => (
+              <DepositRow key={type} type={type} entry={projectEntries.find((e) => e.type === type)} onCommit={commitField} />
+            ))}
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ============================================================================
    AS — 프로젝트별 AS 일정 등록 (구글 캘린더 · 노션 동기화)
@@ -5827,6 +6065,7 @@ const VIEW_COMPONENTS = {
   toolkit: InteriorToolkit,
   vendors: VendorContacts,
   projectSchedule: ProjectSchedulePage,
+  deposits: DepositStatusPage,
   payments: PaymentsPage,
   proposal: ProposalPage,
   inquiry: InquiryPage,
