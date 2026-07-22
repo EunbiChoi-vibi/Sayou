@@ -2279,8 +2279,24 @@ function useGlobalProjectNames() {
   return names;
 }
 
+// "프로젝트 목록"에 있는 첫상담/실측일정/디자인미팅-1/디자인미팅-2 컬럼을 프로젝트별 일정으로 모아줍니다
+// (공정표 DB와는 별개 — 프로젝트별 공정표 캘린더에 함께 표시하기 위한 용도)
+const PIPELINE_MILESTONE_FIELDS = [
+  ["첫상담", "첫상담"],
+  ["실측일정", "실측"],
+  ["디자인미팅-1", "디자인미팅 1차"],
+  ["디자인미팅-2", "디자인미팅 2차"],
+];
+
+async function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+// usePipelineLookup과 usePipelineMilestones가 각자 따로 "프로젝트 목록" DB를 조회하면,
+// 대시보드 화면 하나에서 노션 API 요청이 한꺼번에 여러 건 몰려 일시적으로 실패(요청 제한 등)하기 쉬웠습니다.
+// 이제 이 훅 하나가 두 가지 정보를 한 번의 조회로 같이 만들어 씁니다.
 function usePipelineLookup() {
   const [sites, setSites] = useState([]);
+  const [milestonesByProject, setMilestonesByProject] = useState(new Map());
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
     async function loadCache() {
@@ -2292,25 +2308,51 @@ function usePipelineLookup() {
         // 아직 프로젝트 목록을 한 번도 안 불러와졌으면 빈 목록
       }
     }
-    // 대시보드(Pipeline 컴포넌트)를 거치지 않고 바로 이 화면으로 새로고침되는 경우에도
-    // 프로젝트 연결이 항상 최신 상태이도록, 캐시와 별개로 노션에서 직접 한 번 더 가져옵니다
+    // 대시보드(Pipeline 컴포넌트)를 거치지 않고 바로 다른 화면으로 새로고침되는 경우에도
+    // 프로젝트 연결이 항상 최신 상태이도록, 캐시와 별개로 노션에서 직접 한 번 더 가져옵니다.
+    // 일시적인 요청 실패(네트워크 혼잡·요청 제한 등)에 대비해 짧은 간격으로 몇 번 더 시도합니다.
     async function loadLive() {
-      try {
-        const r = await window.storage.get(NOTION_WORKER_URL_KEY, true);
-        const workerUrl = (r && r.value) || DEFAULT_WORKER_URL;
-        if (!workerUrl) return;
-        const result = await notionQueryDatabase(workerUrl, "7523128efdd84be1936343c9e28d9fad", { page_size: 100 });
-        const fresh = [];
-        (result.results || []).forEach((page) => {
-          const props = page.properties;
-          const name = notionPlainText(props["프로젝트명"]) || notionPlainText(props["비고(수정금지)"]);
-          if (!name) return;
-          fresh.push({ id: page.id, name, notionPageId: page.id });
-        });
-        if (!cancelled && fresh.length) setSites(fresh);
-      } catch (e) {
-        // 실패하면 캐시된 값을 그대로 씁니다
+      const workerUrl = await (async () => {
+        try {
+          const r = await window.storage.get(NOTION_WORKER_URL_KEY, true);
+          return (r && r.value) || DEFAULT_WORKER_URL;
+        } catch (e) {
+          return DEFAULT_WORKER_URL;
+        }
+      })();
+      if (!workerUrl) return;
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const result = await notionQueryDatabase(workerUrl, "7523128efdd84be1936343c9e28d9fad", { page_size: 100 });
+          const fresh = [];
+          const milestones = new Map();
+          (result.results || []).forEach((page) => {
+            const props = page.properties;
+            const name = notionPlainText(props["프로젝트명"]) || notionPlainText(props["비고(수정금지)"]);
+            if (!name) return;
+            fresh.push({ id: page.id, name, notionPageId: page.id });
+
+            const events = [];
+            PIPELINE_MILESTONE_FIELDS.forEach(([prop, label]) => {
+              const range = notionDateValue(props[prop]);
+              if (range && range.start) {
+                events.push({ kind: label, date: range.start.slice(0, 10), endDate: (range.end || range.start).slice(0, 10) });
+              }
+            });
+            if (events.length) milestones.set(name, events);
+          });
+          if (!cancelled) {
+            if (fresh.length) setSites(fresh);
+            setMilestonesByProject(milestones);
+            setReady(true);
+          }
+          return;
+        } catch (e) {
+          if (attempt < 2) await sleep(1200 * (attempt + 1));
+        }
       }
+      // 3번 다 실패하면 캐시된 값을 그대로 쓰고, 다음 15초 주기에 다시 시도합니다
     }
     loadCache();
     loadLive();
@@ -2319,51 +2361,7 @@ function usePipelineLookup() {
   }, []);
   const pageIdByName = useMemo(() => new Map(sites.filter((s) => s.notionPageId).map((s) => [s.name, s.notionPageId])), [sites]);
   const nameByPageId = useMemo(() => new Map(sites.filter((s) => s.notionPageId).map((s) => [s.notionPageId, s.name])), [sites]);
-  return { sites, pageIdByName, nameByPageId };
-}
-
-// "프로젝트 목록"에 있는 첫상담/실측일정/디자인미팅-1/디자인미팅-2 컬럼을 프로젝트별 일정으로 모아줍니다
-// (공정표 DB와는 별개 — 프로젝트별 공정표 캘린더에 함께 표시하기 위한 용도)
-const PIPELINE_MILESTONE_FIELDS = [
-  ["첫상담", "첫상담"],
-  ["실측일정", "실측"],
-  ["디자인미팅-1", "디자인미팅 1차"],
-  ["디자인미팅-2", "디자인미팅 2차"],
-];
-function usePipelineMilestones() {
-  const [milestonesByProject, setMilestonesByProject] = useState(new Map());
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const r = await window.storage.get(NOTION_WORKER_URL_KEY, true);
-        const workerUrl = (r && r.value) || DEFAULT_WORKER_URL;
-        if (!workerUrl) return;
-        const result = await notionQueryDatabase(workerUrl, "7523128efdd84be1936343c9e28d9fad", { page_size: 100 });
-        const map = new Map();
-        (result.results || []).forEach((page) => {
-          const props = page.properties;
-          const name = notionPlainText(props["프로젝트명"]);
-          if (!name) return;
-          const events = [];
-          PIPELINE_MILESTONE_FIELDS.forEach(([prop, label]) => {
-            const range = notionDateValue(props[prop]);
-            if (range && range.start) {
-              events.push({ kind: label, date: range.start.slice(0, 10), endDate: (range.end || range.start).slice(0, 10) });
-            }
-          });
-          if (events.length) map.set(name, events);
-        });
-        if (!cancelled) setMilestonesByProject(map);
-      } catch (e) {
-        // 실패하면 다음 주기에 다시 시도합니다
-      }
-    }
-    load();
-    const t = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, []);
-  return milestonesByProject;
+  return { sites, pageIdByName, nameByPageId, milestonesByProject, ready };
 }
 
 const STAGE_DATE_STORAGE_KEYS = {
@@ -5111,18 +5109,21 @@ function ProposalPage({ onBack }) {
 
   // 프로젝트 선택 시 노션에서 제안서 조회
   useEffect(() => {
-    if (!projectName || !dbId || !workerUrl) return;
-    
+    // 프로젝트 연결 정보(pipelineLookup)를 아직 한 번도 못 불러왔으면, "제안서가 없다"고 성급하게
+    // 보여주지 않고 연결 정보가 준비될 때까지 기다립니다 (연결 조회가 준비되면 이 effect가 다시 실행됩니다)
+    if (!projectName || !dbId || !workerUrl || !pipelineLookup.ready) return;
+
     (async () => {
       setLoading(true);
       setNotionError("");
       setProposals([]);
-      
+
       try {
         const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
         if (!linkedPageId) {
           setProposals([]);
           setLoading(false);
+          setNotionError(`'${projectName}' 프로젝트가 노션 "프로젝트 목록"과 연결되지 않았습니다. 노션에서 프로젝트명이 정확히 일치하는지 확인해주세요.`);
           return;
         }
 
@@ -6044,7 +6045,7 @@ function ProjectSchedulePage({ onBack }) {
   const current = schedules[projectName] || defaultProjectSchedule();
 
   // "프로젝트 목록"의 첫상담·실측일정·디자인미팅-1·디자인미팅-2도 공정표와 같은 캘린더에 함께 표시합니다
-  const milestonesByProject = usePipelineMilestones();
+  const { milestonesByProject } = usePipelineLookup();
   const milestoneEvents = (milestonesByProject.get(projectName) || []).map((m) => ({
     id: `milestone-${projectName}-${m.kind}`,
     type: m.kind,
