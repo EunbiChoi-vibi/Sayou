@@ -1377,6 +1377,7 @@ function notionPlainText(prop) {
     case "title": return (prop.title || []).map((t) => t.plain_text).join("");
     case "rich_text": return (prop.rich_text || []).map((t) => t.plain_text).join("");
     case "select": return prop.select ? prop.select.name : "";
+    case "status": return prop.status ? prop.status.name : "";
     case "number": return prop.number == null ? "" : String(prop.number);
     case "email": return prop.email || "";
     case "phone_number": return prop.phone_number || "";
@@ -5150,6 +5151,7 @@ function ProposalPage({ onBack }) {
           title: notionPlainText(props["이름"]) || "(제목 없음)",
           date: range ? range.start.slice(0, 10) : "",
           content: notionPlainText(props["내용"]) || "",
+          status: notionPlainText(props["송부상태"]) || "",
           files,
           notionPageId: page.id
         };
@@ -5265,6 +5267,11 @@ function ProposalPage({ onBack }) {
                   >
                     {p.title}
                   </button>
+                  {p.status && (
+                    <span style={{ alignSelf: "flex-start", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: p.status === "송부 완료" ? DASH.tealSoft : DASH.amberSoft, color: p.status === "송부 완료" ? DASH.teal : DASH.amber }}>
+                      {p.status}
+                    </span>
+                  )}
                   {p.date && <div style={{ fontSize: 11.5, color: DASH.inkFaint }}>{fmtYMDLabel(p.date)}</div>}
                   {p.content && (
                     <div style={{ fontSize: 11.5, color: DASH.inkSoft, lineHeight: 1.4 }}>
