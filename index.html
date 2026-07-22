@@ -5079,14 +5079,16 @@ function ProposalPage({ onBack }) {
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notionError, setNotionError] = useState("");
-  const [dbId, setDbId] = useState("");
-  const [workerUrl, setWorkerUrl] = useState("");
-  
+  const [dbId, setDbId] = useState(NOTION_DB_PROPOSAL);
+  const [workerUrl, setWorkerUrl] = useState(DEFAULT_WORKER_URL);
+
   const pipelineLookup = usePipelineLookup();
   const globalProjectNames = useGlobalProjectNames();
   const options = Array.from(new Set([...globalProjectNames, ...ALL_PROJECT_NAMES])).filter((n) => n);
 
-  // Notion DB ID와 Worker URL 로드
+  // Notion DB ID와 Worker URL 로드 — 설정에서 따로 저장한 값이 없으면 기본값을 그대로 씁니다
+  // (다른 화면들이 쓰는 useNotionAutoSync와 동일한 방식으로 맞춤 — 저장된 값이 없어서 조회 자체가
+  // 영영 실행되지 않는 문제가 있었습니다)
   useEffect(() => {
     (async () => {
       try {
