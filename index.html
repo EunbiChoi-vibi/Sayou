@@ -931,8 +931,10 @@ function LoginGate({ onLoggedIn }) {
 }
 
 const COMPANY_CALENDAR_ID = "ea016c1bcb169a0c4b4302fcbf3c36c8f3c6aafc1093870898f7c19d154df7ae@group.calendar.google.com";
-const GCAL_TOMBSTONE_KEY = "interior-dashboard-gcal-tombstone-v1";
 
+// 대시보드 → 구글 캘린더 단방향 연동입니다. 구글 캘린더에 이미 있는 일정을 대시보드로 가져오거나,
+// 구글 쪽 변경사항으로 대시보드 데이터를 건드리는 동작은 전혀 하지 않습니다(예전엔 양방향이라 구글
+// 캘린더의 실제 일정이 중복 생성되는 등 오염되는 문제가 있었어요).
 const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, updateCurrent, periodFallbackStart, periodFallbackEnd, allSchedules, setAllSchedules }, ref) {
   const [clientId, setClientId] = useState(DEFAULT_GOOGLE_CLIENT_ID);
   const [clientIdLoaded, setClientIdLoaded] = useState(false);
@@ -943,22 +945,6 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
   const [isSyncing, setIsSyncing] = useState(false);
   const tokenClientRef = useRef(null);
   const syncingRef = useRef(false);
-  const tombstoneRef = useRef(new Set());
-  const tombstoneLoadedRef = useRef(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await window.storage.get(GCAL_TOMBSTONE_KEY, true);
-        const parsed = r && r.value ? JSON.parse(r.value) : [];
-        if (Array.isArray(parsed)) tombstoneRef.current = new Set(parsed);
-      } catch (e) {
-        // 아직 지운 일정이 없으면 정상
-      } finally {
-        tombstoneLoadedRef.current = true;
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1029,23 +1015,13 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
     return res.json();
   }
 
-  async function tombstoneEvent(eventId) {
-    tombstoneRef.current.add(eventId);
-    try {
-      await window.storage.set(GCAL_TOMBSTONE_KEY, JSON.stringify([...tombstoneRef.current]), true);
-    } catch (e) {
-      // 저장 실패해도 이번 세션 동안은 in-memory tombstoneRef로 계속 막아줍니다
-    }
-  }
-
   async function deleteEvent(eventId) {
     if (!eventId) return;
-    await tombstoneEvent(eventId); // 구글 쪽 삭제 성공 여부와 무관하게, 다시는 안 가져오도록 먼저 확실히 막습니다
-    if (!accessToken) return; // 연결 안 돼있으면 실제 삭제는 다음 로그인 때 시도돼요 (되살아나지는 않아요)
+    if (!accessToken) return; // 연결 안 돼있으면 다음 로그인 때 다시 시도해주세요
     try {
       await gcalFetch(`calendars/${encodeURIComponent(calendarId)}/events/${eventId}`, { method: "DELETE" });
     } catch (e) {
-      // 실제 삭제는 실패해도 위 tombstone 처리 덕분에 다시 불러오지는 않습니다
+      // 조용히 무시 — 다음 동기화 때 다시 시도되지는 않지만, 대시보드 쪽 목록에서는 이미 지워진 상태입니다
     }
   }
   React.useImperativeHandle(ref, () => ({ deleteEvent }));
@@ -1165,76 +1141,6 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
     return { count, pushedEventIds, skippedDuplicates, updated };
   }
 
-  async function pullEvents(justPushedIds) {
-    const isMulti = !!allSchedules;
-    const timeMin = `${(!isMulti && current.periodStart) || periodFallbackStart}T00:00:00Z`;
-    const timeMax = `${(!isMulti && current.periodEnd) || periodFallbackEnd}T23:59:59Z`;
-    const data = await gcalFetch(`calendars/${encodeURIComponent(calendarId)}/events?singleEvents=true&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=250`);
-    const liveIds = new Set((data.items || []).filter((ev) => ev.status !== "cancelled").map((ev) => ev.id));
-
-    const allTasksFlat = isMulti
-      ? Object.entries(allSchedules).flatMap(([pName, proj]) => (proj?.tasks || []).map((t) => ({ ...t, __project: pName })))
-      : current.tasks.map((t) => ({ ...t, __project: null }));
-    // current.tasks may be stale here (it's a prop snapshot from render time), so also fold in
-    // whatever pushTasks() just created in this same sync pass to guarantee no re-import.
-    const existingGoogleIds = new Set([...allTasksFlat.map((t) => t.googleEventId).filter(Boolean), ...(justPushedIds || [])]);
-    let imported = 0;
-    const newTasksByProject = {};
-    (data.items || []).forEach((ev) => {
-      if (ev.status === "cancelled") return;
-      if (existingGoogleIds.has(ev.id)) return;
-      if (tombstoneRef.current.has(ev.id)) return; // 예전에 우리가 지운 일정 — 구글 쪽 삭제가 실패했어도 다시 안 가져옵니다
-      const parsed = parseSummary(ev.summary);
-      if (!parsed) return; // "[공종] 내용" 형식이 아니면(우리가 만든 일정이 아니면) 건너뜁니다
-      const startDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.slice(0, 10) : null);
-      if (!startDate) return;
-      let endDate = startDate;
-      if (ev.end?.date) {
-        const d = parseYMD(ev.end.date); d.setDate(d.getDate() - 1); endDate = ymd(d);
-      } else if (ev.end?.dateTime) {
-        endDate = ev.end.dateTime.slice(0, 10);
-      }
-      const type = parsed.type;
-      const label = parsed.label || type;
-      const task = { id: makeScheduleRowId(), type, label, date: startDate, endDate, googleEventId: ev.id };
-      if (isMulti) {
-        // 제목에 보이는 [프로젝트명]을 우선으로 쓰고, 없으면 숨겨진 태그, 그것도 없으면 미분류로 보냅니다
-        const taggedProject = ev.extendedProperties?.private?.sayouProject;
-        const candidate = (parsed.project && allSchedules[parsed.project]) ? parsed.project : ((taggedProject && allSchedules[taggedProject]) ? taggedProject : null);
-        const pName = candidate || "미분류";
-        (newTasksByProject[pName] = newTasksByProject[pName] || []).push(task);
-      } else {
-        (newTasksByProject.__single = newTasksByProject.__single || []).push(task);
-      }
-      imported++;
-    });
-
-    if (isMulti) {
-      setAllSchedules((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((pName) => {
-          const proj = next[pName];
-          if (!proj || !proj.tasks) return;
-          // 구글 캘린더에서 삭제된(지금 조회 결과에 없는) 일정은 대시보드에서도 같이 지웁니다
-          const stillAlive = proj.tasks.filter((t) => !t.googleEventId || liveIds.has(t.googleEventId));
-          next[pName] = { ...proj, tasks: stillAlive };
-        });
-        Object.keys(newTasksByProject).forEach((pName) => {
-          const existingProj = next[pName] || defaultProjectSchedule();
-          next[pName] = { ...existingProj, tasks: dedupeByKey([...existingProj.tasks, ...newTasksByProject[pName]], (t) => t.notionPageId || t.googleEventId || `${String(t.type).trim().toLowerCase()}__${String(t.label).trim().toLowerCase()}__${t.date}__${t.endDate}`) };
-        });
-        return next;
-      });
-    } else {
-      updateCurrent((proj) => {
-        const stillAlive = proj.tasks.filter((t) => !t.googleEventId || liveIds.has(t.googleEventId));
-        const newTasks = newTasksByProject.__single || [];
-        return { ...proj, tasks: newTasks.length ? [...stillAlive, ...newTasks] : stillAlive };
-      });
-    }
-    return imported;
-  }
-
   async function syncNow(silent) {
     if (!accessToken) { if (!silent) setSyncStatus({ type: "err", text: "먼저 구글 계정을 연결해주세요." }); return; }
     if (syncingRef.current) return; // 중복 클릭/중복 실행 방지 — 이게 없으면 같은 일정이 두 번 생성될 수 있어요
@@ -1242,12 +1148,11 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
     setIsSyncing(true);
     if (!silent) setSyncStatus({ type: "idle", text: "동기화 중..." });
     try {
-      const { count: pushed, pushedEventIds, skippedDuplicates, updated } = await pushTasks();
-      const pulled = await pullEvents(pushedEventIds);
+      const { count: pushed, skippedDuplicates, updated } = await pushTasks();
       const now = new Date().toLocaleTimeString("ko-KR");
       const dupText = skippedDuplicates > 0 ? ` · 중복 제외 ${skippedDuplicates}건` : "";
       const updText = updated > 0 ? ` · 수정 ${updated}건` : "";
-      setSyncStatus({ type: "ok", text: `✓ ${now} 동기화 완료 (내보냄 ${pushed}건 · 가져옴 ${pulled}건${updText}${dupText})` });
+      setSyncStatus({ type: "ok", text: `✓ ${now} 내보내기 완료 (새 일정 ${pushed}건${updText}${dupText})` });
     } catch (err) {
       setSyncStatus({ type: "err", text: err.message || "동기화 중 오류가 발생했습니다." });
     } finally {
@@ -1283,7 +1188,7 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
   return (
     <Card style={{ padding: 16, marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: DASH.navy }}>Google 캘린더 연동 (양방향)</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: DASH.navy }}>Google 캘린더 연동 (대시보드 → 구글, 단방향)</div>
         <span style={{ fontSize: 11.5, color: statusColor }}>{syncStatus.text}</span>
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
@@ -1301,13 +1206,13 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
           </button>
         ) : (
           <>
-            <button onClick={() => syncNow(false)} disabled={isSyncing} style={{ fontSize: 12.5, fontWeight: 700, padding: "9px 16px", borderRadius: 8, border: "none", background: DASH.navy, color: "#fff", opacity: isSyncing ? 0.6 : 1, cursor: isSyncing ? "not-allowed" : "pointer" }}>{isSyncing ? "동기화 중…" : "지금 동기화"}</button>
+            <button onClick={() => syncNow(false)} disabled={isSyncing} style={{ fontSize: 12.5, fontWeight: 700, padding: "9px 16px", borderRadius: 8, border: "none", background: DASH.navy, color: "#fff", opacity: isSyncing ? 0.6 : 1, cursor: isSyncing ? "not-allowed" : "pointer" }}>{isSyncing ? "내보내는 중…" : "지금 내보내기"}</button>
             <button onClick={disconnect} style={{ fontSize: 12.5, fontWeight: 600, padding: "9px 14px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.surface, color: DASH.inkSoft }}>연결 해제</button>
           </>
         )}
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: DASH.inkFaint, lineHeight: 1.5 }}>
-        정해둔 기간 범위 안에서 모든 프로젝트의 일정을 서로 없는 것만 주고받고, 이미 연동된 일정의 날짜가 바뀌면 구글 쪽 이벤트도 함께 수정됩니다. 연결되어 있는 동안 30초마다 변경 여부를 확인해서, 바뀐 게 있을 때만 자동으로 동기화해요. 브라우저 세션마다 다시 로그인이 필요해요.
+        대시보드(노션 기반)의 일정을 구글 캘린더로 내보내기만 합니다 — 구글 캘린더에 있는 일정을 대시보드로 가져오거나, 구글 쪽 변경사항으로 대시보드 데이터를 수정하는 일은 없습니다. 이미 내보낸 일정의 날짜가 바뀌면 구글 쪽 이벤트도 그대로 맞춰 수정됩니다. 연결되어 있는 동안 30초마다 변경 여부를 확인해서, 바뀐 게 있을 때만 자동으로 내보내요. 브라우저 세션마다 다시 로그인이 필요해요.
       </div>
     </Card>
   );
