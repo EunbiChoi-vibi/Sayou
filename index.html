@@ -4296,10 +4296,56 @@ function vendorCategoryIdForName(name) {
   return seed ? seed.id : "cat_" + name.replace(/\s+/g, "_");
 }
 
+function copyPlainText(text, onDone) {
+  const value = String(text || "");
+  if (!value) return;
+  const done = () => onDone && onDone();
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(value).then(done).catch(() => {
+      const ta = document.createElement("textarea");
+      ta.value = value; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+      done();
+    });
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = value; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    done();
+  }
+}
+
+function VendorCopyBtn({ copied, onClick, title }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 100, border: `1px solid ${DASH.line}`, background: copied ? DASH.teal : DASH.surface, color: copied ? "#fff" : DASH.inkSoft, flexShrink: 0, cursor: "pointer" }}
+    >
+      {copied ? "복사됨" : "복사"}
+    </button>
+  );
+}
+
 function VendorContacts({ onBack }) {
   const [vendorState, setVendorState] = useState(defaultVendorState);
   const [loaded, setLoaded] = useState(false);
   const [activeCatId, setActiveCatId] = useState(VENDOR_SEED_CATEGORIES[0].id);
+  const [copiedKey, setCopiedKey] = useState(null);
+  const copyTimerRef = useRef(null);
+
+  function handleCopy(key, text, digitsOnly) {
+    const doCopy = digitsOnly ? (t, cb) => copyAccountDigits(t, cb) : (t, cb) => copyPlainText(t, cb);
+    doCopy(text, () => {
+      setCopiedKey(key);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopiedKey((cur) => (cur === key ? null : cur)), 1500);
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -4449,9 +4495,23 @@ function VendorContacts({ onBack }) {
                       <tr key={c.id}>
                         <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.ink, fontWeight: 600 }}>{c.company || "-"}</td>
                         <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.manager || "-"}</td>
-                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.ink, fontFamily: "'Pretendard'" }}>{c.phone || "-"}</td>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.ink, fontFamily: "'Pretendard'" }}>
+                          {c.phone ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ whiteSpace: "nowrap" }}>{c.phone}</span>
+                              <VendorCopyBtn copied={copiedKey === `${c.id}-phone`} onClick={() => handleCopy(`${c.id}-phone`, c.phone, false)} title="연락처 복사" />
+                            </div>
+                          ) : "-"}
+                        </td>
                         <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.email || "-"}</td>
-                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.account || "-"}</td>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>
+                          {c.account ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.account}</span>
+                              <VendorCopyBtn copied={copiedKey === `${c.id}-account`} onClick={() => handleCopy(`${c.id}-account`, c.account, true)} title="계좌번호 숫자만 복사" />
+                            </div>
+                          ) : "-"}
+                        </td>
                         <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.note || "-"}</td>
                       </tr>
                     ))}
