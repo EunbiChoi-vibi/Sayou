@@ -5004,127 +5004,170 @@ function ProposalPage({ onBack }) {
    견적 — 프로젝트별 견적서 조회
    ============================================================================ */
 
-function defaultEstimateProject() { return { entries: [] }; }
-
 function EstimatePage({ onBack }) {
-  const [store, setStore, loaded, saveStatus] = useProjectStore(ESTIMATE_STORAGE_KEY, {});
   const [projectName, setProjectName] = useState(ALL_PROJECT_NAMES[0] || "");
-  const [draft, setDraft] = useState({ title: "", amount: "", date: STAGE_TODAY, link: "", memo: "" });
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [notionError, setNotionError] = useState("");
+  const [dbId, setDbId] = useState(NOTION_DB_ESTIMATE);
+  const [workerUrl, setWorkerUrl] = useState(DEFAULT_WORKER_URL);
+  // 이 화면은 노션 "견적" DB를 읽기 전용으로 조회만 합니다 — 대시보드에서 노션으로 아무것도 쓰지 않습니다(단방향 동기화)
+  const [syncStatus, setSyncStatus] = useState({ type: "idle", text: "" });
+
+  const pipelineLookup = usePipelineLookup();
+  const globalProjectNames = useGlobalProjectNames();
+  const options = Array.from(new Set([...globalProjectNames, ...ALL_PROJECT_NAMES])).filter((n) => n);
 
   useEffect(() => {
-    if (loaded && projectName && !store[projectName]) {
-      setStore((prev) => ({ ...prev, [projectName]: defaultEstimateProject() }));
-    }
+    (async () => {
+      try {
+        const r1 = await window.storage.get("interior-dashboard-notion-worker-url-v1", true);
+        if (r1 && r1.value) setWorkerUrl(r1.value);
+      } catch (e) {}
+      try {
+        const r2 = await window.storage.get("interior-dashboard-notion-db-estimate-v1", true);
+        if (r2 && r2.value) setDbId(r2.value);
+      } catch (e) {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (options.length === 0) return;
+    if (!projectName || !options.includes(projectName)) setProjectName(options[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectName, loaded]);
+  }, [options.join("|")]);
 
-  const current = store[projectName] || defaultEstimateProject();
-  function update(updater) { setStore((prev) => ({ ...prev, [projectName]: updater(prev[projectName] || defaultEstimateProject()) })); }
+  async function fetchEstimates() {
+    if (!projectName || !dbId || !workerUrl || !pipelineLookup.ready) return;
+    setLoading(true);
+    setNotionError("");
 
-  function addEntry() {
-    if (!draft.title.trim()) return;
-    update((proj) => ({ entries: [...proj.entries, { id: makeStageId(), title: draft.title.trim(), amount: Number(draft.amount) || 0, date: draft.date, link: draft.link.trim(), memo: draft.memo.trim() }] }));
-    setDraft({ title: "", amount: "", date: STAGE_TODAY, link: "", memo: "" });
-  }
-  function removeEntry(id) {
-    const target = current.entries.find((e) => e.id === id);
-    update((proj) => ({ entries: proj.entries.filter((e) => e.id !== id) }));
-    if (target && target.notionPageId) notionSync.archivePage(target.notionPageId);
-  }
-
-  const total = current.entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const pipelineLookup = usePipelineLookup();
-
-  const notionSync = useNotionAutoSync("interior-dashboard-notion-db-estimate-v1", NOTION_DB_ESTIMATE, async (workerUrl, databaseId) => {
-    let pushed = 0, pulled = 0, updated = 0, blocked = 0;
-    const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
-    const justPushedIds = [];
-    for (const e of current.entries) {
-      // linkedPageId를 아직 못 구했으면(연결 조회가 안 끝났거나 실패한 순간) 절대 쓰지 않아요 —
-      // 이미 연결된 항목을 업데이트할 때도 마찬가지로 건너뜁니다. 안 그러면 관계값이 빈 값으로 덮어써질 수 있어요.
-      if (!linkedPageId) { blocked++; continue; }
-      const props = {
-        "이름": notionTitleProp(e.title),
-        "프로젝트명 1": notionRelationProp(linkedPageId),
-        "금액": notionNumberProp(e.amount),
-        "날짜": notionDateRangeProp(e.date, e.date),
-        "링크": { url: e.link || null },
-        "메모": notionTextProp(e.memo),
-      };
-      if (e.notionPageId) {
-        await notionUpdatePageSafe(workerUrl, e.notionPageId, props);
-        updated++;
-      } else {
-        const page = await notionCreatePage(workerUrl, databaseId, props);
-        update((proj) => ({ entries: proj.entries.map((x) => (x.id === e.id ? { ...x, notionPageId: page.id } : x)) }));
-        justPushedIds.push(page.id);
-        pushed++;
+    try {
+      const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
+      if (!linkedPageId) {
+        setEntries([]);
+        setLoading(false);
+        setNotionError(`'${projectName}' 프로젝트가 노션 "프로젝트 목록"과 연결되지 않았습니다. 노션에서 프로젝트명이 정확히 일치하는지 확인해주세요.`);
+        setSyncStatus({ type: "err", text: "Notion 오류: 프로젝트 연결 안 됨" });
+        return;
       }
-    }
-    const known = new Set([...current.entries.map((e) => e.notionPageId).filter(Boolean), ...justPushedIds]);
-    const newEntries = [];
-    if (linkedPageId) {
-      const result = await notionQueryDatabase(workerUrl, databaseId, { filter: { property: "프로젝트명 1", relation: { contains: linkedPageId } }, page_size: 100 });
-      (result.results || []).forEach((page) => {
-        if (known.has(page.id)) return;
+
+      const result = await notionQueryDatabase(workerUrl, dbId, {
+        filter: { property: "프로젝트명 1", relation: { contains: linkedPageId } },
+        page_size: 100
+      });
+
+      const items = (result.results || []).map((page) => {
         const props = page.properties;
         const range = notionDateValue(props["날짜"]);
-        newEntries.push({ id: makeStageId(), title: notionPlainText(props["이름"]) || "(제목 없음)", amount: Number(notionPlainText(props["금액"])) || 0, date: range ? range.start.slice(0, 10) : STAGE_TODAY, link: props["링크"]?.url || "", memo: notionPlainText(props["메모"]), notionPageId: page.id });
-        pulled++;
+        return {
+          id: page.id,
+          title: notionPlainText(props["이름"]) || "(제목 없음)",
+          amount: Number(notionPlainText(props["금액"])) || 0,
+          date: range ? range.start.slice(0, 10) : "",
+          link: props["링크"]?.url || "",
+          memo: notionPlainText(props["메모"]),
+          notionPageId: page.id
+        };
       });
+
+      setEntries(items.sort((a, b) => (a.date < b.date ? 1 : -1)));
+      setSyncStatus({ type: "ok", text: `Notion 동기화됨 · ${new Date().toLocaleTimeString("ko-KR")}` });
+    } catch (err) {
+      setNotionError(`조회 오류: ${err.message || "알 수 없는 오류"}`);
+      setSyncStatus({ type: "err", text: `Notion 오류: ${(err && err.message) || "동기화 실패"}` });
+    } finally {
+      setLoading(false);
     }
-    if (newEntries.length) update((proj) => ({ entries: dedupeByKey([...proj.entries, ...newEntries], (e) => e.notionPageId) }));
-    return { pushed, pulled, updated, blocked };
-  }, loaded);
+  }
+
+  useEffect(() => {
+    setEntries([]);
+    fetchEstimates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectName, dbId, workerUrl, pipelineLookup.pageIdByName]);
+
+  useEffect(() => {
+    const t = setInterval(fetchEstimates, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectName, dbId, workerUrl, pipelineLookup.pageIdByName, pipelineLookup.ready]);
+
+  const estimateSync = {
+    status: syncStatus,
+    configured: !!(workerUrl && dbId),
+    retryNow: fetchEstimates,
+  };
+
+  const total = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   return (
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px 60px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <StageHeader onBack={onBack} eyebrow="Estimate" title="견적" desc="프로젝트별 견적서를 등록하고 한눈에 조회하세요." />
-          <SaveStatusText status={saveStatus} />
+          <StageHeader onBack={onBack} eyebrow="Estimate" title="견적서" desc="프로젝트를 선택하면 노션 견적서를 확인할 수 있어요." />
         </div>
 
-        <ProjectPicker projectName={projectName} setProjectName={setProjectName} extraNames={Object.keys(store)} />
-
-        <div style={{ marginBottom: 14 }}><NotionStatusBadge sync={notionSync} /></div>
-
         <Card style={{ padding: 16, marginBottom: 14 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: DASH.navy, marginBottom: 10 }}>견적서 추가</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="견적서 제목" style={stageInputStyle} />
-            <input type="number" value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} placeholder="금액 (원)" style={stageInputStyle} />
-            <input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} style={stageInputStyle} />
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>프로젝트(현장) 선택</label>
+              <select
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                style={{ fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink }}
+              >
+                {options.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <NotionStatusBadge sync={estimateSync} />
           </div>
-          <input value={draft.link} onChange={(e) => setDraft({ ...draft, link: e.target.value })} placeholder="견적서 파일 링크 (선택)" style={{ ...stageInputStyle, width: "100%", marginBottom: 8 }} />
-          <input value={draft.memo} onChange={(e) => setDraft({ ...draft, memo: e.target.value })} placeholder="메모" style={{ ...stageInputStyle, width: "100%" }} />
-          <button onClick={addEntry} style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, padding: "8px 16px", borderRadius: 8, border: "none", background: DASH.brass, color: DASH.navy }}>+ 견적서 추가</button>
         </Card>
 
-        <Card>
-          {current.entries.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>{projectName}에 등록된 견적서가 없습니다.</div>
-          ) : (
-            <>
-              {[...current.entries].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e, i, arr) => (
-                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}` }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: DASH.ink }}>{e.title}</div>
-                    <div style={{ fontSize: 11.5, color: DASH.inkFaint }}>{fmtYMDLabel(e.date)}{e.memo ? ` · ${e.memo}` : ""}</div>
+        {notionError && (
+          <Card style={{ padding: 12, marginBottom: 14, borderLeft: `3px solid ${DASH.red}` }}>
+            <div style={{ fontSize: 12.5, color: DASH.red }}>{notionError}</div>
+            <div style={{ fontSize: 11, color: DASH.inkFaint, marginTop: 6 }}>우측 상단 ⚙ 에서 Notion 설정을 확인해주세요.</div>
+          </Card>
+        )}
+
+        {loading && (
+          <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>
+            조회 중...
+          </div>
+        )}
+
+        {!loading && (
+          <Card>
+            {entries.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>{projectName}의 견적서가 없습니다.</div>
+            ) : (
+              <>
+                {entries.map((e) => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}` }}>
+                    <div style={{ flex: 1 }}>
+                      <button
+                        onClick={() => window.open(`https://www.notion.so/${e.notionPageId.replace(/-/g, "")}`, "_blank")}
+                        title="Notion에서 열기"
+                        style={{ textAlign: "left", fontSize: 13.5, fontWeight: 700, color: DASH.ink, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                      >
+                        {e.title}
+                      </button>
+                      <div style={{ fontSize: 11.5, color: DASH.inkFaint }}>{e.date ? fmtYMDLabel(e.date) : ""}{e.memo ? ` · ${e.memo}` : ""}</div>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{e.amount.toLocaleString("ko-KR")}원</div>
+                    {e.link && <a href={e.link} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: DASH.blue }}>🔗</a>}
                   </div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{(Number(e.amount) || 0).toLocaleString("ko-KR")}원</div>
-                  {e.link && <a href={e.link} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: DASH.blue }}>🔗</a>}
-                  <StageDeleteBtn onClick={() => removeEntry(e.id)} />
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", fontSize: 13.5, fontWeight: 700, color: DASH.navy }}>
+                  <span>합계</span>
+                  <span>{total.toLocaleString("ko-KR")}원</span>
                 </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", fontSize: 13.5, fontWeight: 700, color: DASH.navy }}>
-                <span>합계</span>
-                <span>{total.toLocaleString("ko-KR")}원</span>
-              </div>
-            </>
-          )}
-        </Card>
+              </>
+            )}
+          </Card>
+        )}
       </div>
     </div>
   );
