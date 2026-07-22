@@ -254,6 +254,59 @@ function buildMonthGrid(monthDate) {
   return days;
 }
 
+// 캘린더에 표시하기 직전에만 쓰는 화면 전용 변환입니다(원본 tasks 배열이나 구글 캘린더 내보내기
+// 대상은 그대로 두고, 보여줄 때만 두 가지를 정리합니다):
+// 1) 같은 식별자(notionPageId/googleEventId/id)를 가진 항목이 실수로 중복돼 있으면 하나만 남깁니다.
+// 2) 같은 공종의 일정이 작업 내용은 달라도 날짜가 이어지면(연속/겹침), 끊긴 여러 줄이 아니라
+//    하나의 이어진 줄로 보이도록 합칩니다(합쳐진 경우 칩에는 작업 내용 대신 공종만 표시).
+function mergeContinuousTasks(tasks) {
+  const seen = new Map();
+  (tasks || []).forEach((t) => {
+    const key = t.notionPageId || t.googleEventId || t.id;
+    if (!seen.has(key)) seen.set(key, t);
+  });
+  const deduped = Array.from(seen.values());
+
+  const byType = new Map();
+  deduped.forEach((t) => {
+    const list = byType.get(t.type) || [];
+    list.push(t);
+    byType.set(t.type, list);
+  });
+
+  const merged = [];
+  byType.forEach((list, type) => {
+    const sorted = [...list].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    let run = null;
+    sorted.forEach((t) => {
+      const start = parseYMD(t.date);
+      const end = parseYMD(t.endDate || t.date) || start;
+      if (!start) return;
+      if (run && start <= new Date(run.endObj.getFullYear(), run.endObj.getMonth(), run.endObj.getDate() + 1)) {
+        if (end > run.endObj) { run.endDate = t.endDate || t.date; run.endObj = end; }
+        run.sources.push(t);
+      } else {
+        if (run) merged.push(run);
+        run = { type, date: t.date, endDate: t.endDate || t.date, endObj: end, sources: [t] };
+      }
+    });
+    if (run) merged.push(run);
+  });
+
+  return merged.map((run) => {
+    const first = run.sources[0];
+    return {
+      ...first,
+      id: run.sources.length > 1 ? `merged-${type_(run)}-${run.date}-${run.endDate}` : first.id,
+      type: run.type,
+      label: run.sources.length > 1 ? "" : first.label,
+      date: run.date,
+      endDate: run.endDate,
+    };
+  });
+  function type_(run) { return String(run.type).replace(/\s+/g, "_"); }
+}
+
 /* ---------------------------------- small UI pieces ---------------------------------- */
 
 function Badge({ level, children }) {
@@ -1810,7 +1863,7 @@ function ProjectSchedule() {
   Object.keys(schedules).forEach((pName) => {
     if (!pName) return; // 프로젝트명이 빈 값인 유령 키는 건너뜁니다
     const proj = schedules[pName];
-    const combinedTasks = proj && proj.tasks ? proj.tasks : [];
+    const combinedTasks = mergeContinuousTasks(proj && proj.tasks ? proj.tasks : []);
     if (combinedTasks.length === 0) return;
     combinedTasks.forEach((t) => {
       const start = parseYMD(t.date);
@@ -6124,7 +6177,7 @@ function ProjectSchedulePage({ onBack }) {
   const monthDays = buildMonthGrid(monthDate);
   const todayStr = ymd(new Date());
   const tasksByDate = {};
-  [...(current.tasks || []), ...milestoneEvents].forEach((t) => {
+  mergeContinuousTasks([...(current.tasks || []), ...milestoneEvents]).forEach((t) => {
     const start = parseYMD(t.date);
     const end = parseYMD(t.endDate || t.date) || start;
     if (!start) return;
@@ -6196,7 +6249,7 @@ function ProjectSchedulePage({ onBack }) {
                       const roundLeft = t.isStart || dow === 0;
                       const roundRight = t.isEnd || dow === 6;
                       return (
-                        <div key={t.id} title={`${t.type} · ${t.label}`}
+                        <div key={t.id} title={t.label ? `${t.type} · ${t.label}` : t.type}
                           style={{
                             fontSize: isMobile ? 7.5 : 10, padding: isMobile ? "1px 3px" : "3px 6px", margin: 0,
                             marginLeft: roundLeft ? 0 : (isMobile ? -3 : -6), marginRight: roundRight ? 0 : (isMobile ? -3 : -6),
