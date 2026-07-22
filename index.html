@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js" crossorigin></script>
   <style>
-    html, body, #root { min-height: 100%; margin: 0; padding: 0; }
+    html, body, #root { min-height: 100%; margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
     body { background: #F3EFE9; }
     noscript { display: block; padding: 24px; font-family: sans-serif; }
     #boot-error { display:none; padding: 24px; font-family: sans-serif; color:#A8503F; white-space:pre-wrap; }
@@ -1286,13 +1286,13 @@ const GoogleSyncPanel = React.forwardRef(function GoogleSyncPanel({ current, upd
         <span style={{ fontSize: 11.5, color: statusColor }}>{syncStatus.text}</span>
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 220px", minWidth: 0, maxWidth: 280 }}>
           <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>Google OAuth 클라이언트 ID</label>
-          <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="xxxxx.apps.googleusercontent.com" style={{ fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink, width: 280 }} />
+          <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="xxxxx.apps.googleusercontent.com" style={{ fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink, width: "100%", boxSizing: "border-box" }} />
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 180px", minWidth: 0, maxWidth: 220 }}>
           <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>캘린더 ID (고정)</label>
-          <div title={calendarId} style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.brassSoft, color: DASH.navy, width: 220, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{calendarId}</div>
+          <div title={calendarId} style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.brassSoft, color: DASH.navy, width: "100%", boxSizing: "border-box", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{calendarId}</div>
         </div>
         {!accessToken ? (
           <button onClick={connect} disabled={!clientId.trim()} style={{ fontSize: 12.5, fontWeight: 700, padding: "9px 16px", borderRadius: 8, border: "none", background: DASH.brass, color: DASH.navy, opacity: !clientId.trim() ? 0.5 : 1 }}>
@@ -2553,7 +2553,7 @@ function Dashboard({ onNavigate, me, onLogout }) {
       <NotionSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <div className="dash-shell" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "220px 1fr", minHeight: "100vh" }}>
         <Sidebar onNavigate={onNavigate} />
-        <main style={{ padding: isMobile ? "18px 16px 40px" : "26px 34px 60px", maxWidth: 1400 }}>
+        <main style={{ padding: isMobile ? "18px 16px 40px" : "26px 34px 60px", maxWidth: 1400, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 20, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 11.5, letterSpacing: ".14em", textTransform: "uppercase", color: DASH.brass, fontWeight: 600, marginBottom: 6 }}>Interior Project Control</div>
@@ -6630,10 +6630,15 @@ function App() {
     style.setAttribute("data-sayou-responsive", "1");
     style.textContent = `
       @media (max-width: 860px) {
-        [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+        /* repeat(7, ...)는 달력(요일) 그리드라서 1열로 접으면 안 돼요 — 그 외 그리드만 1열로 접습니다 */
+        [style*="grid-template-columns"]:not([style*="repeat(7"]) { grid-template-columns: 1fr !important; }
       }
       @media (max-width: 640px) {
         h1 { font-size: 20px !important; }
+      }
+      @media (max-width: 480px) {
+        /* 좁은 화면에서는 달력 요일 그리드 안 글자·여백을 줄여서 7칸이 자연스럽게 들어가게 해요 */
+        [style*="repeat(7, 1fr)"] { font-size: 10px !important; }
       }
     `;
     document.head.appendChild(style);
