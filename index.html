@@ -155,7 +155,6 @@ const CONSTRUCTION_STORAGE_KEY = "interior-dashboard-construction-v1";
 const AS_STORAGE_KEY = "interior-dashboard-as-v1";
 const ISSUES_STORAGE_KEY = "interior-dashboard-issues-v1";
 const PAYMENTS_STORAGE_KEY = "interior-dashboard-payments-v1";
-const CUSTOM_PROJECTS_STORAGE_KEY = "interior-dashboard-custom-projects-v1";
 
 /* ---- 미리 만들어둔 노션 데이터베이스 ID (Notion 연동 카드에 자동으로 채워짐) ---- */
 const NOTION_DB_CONSULT = "b4a3a3e95a53402290812f0e358dcdc9";
@@ -1322,6 +1321,8 @@ function useNotionAutoSync(dbStorageKey, defaultDatabaseId, onSync, ready) {
   return {
     status,
     configured: !!(workerUrl.trim() && databaseId.trim()),
+    workerUrl: workerUrl.trim(),
+    databaseId: databaseId.trim(),
     retryNow: () => { if (runRef.current) runRef.current(); },
     archivePage: async (pageId) => {
       if (!pageId || !workerUrl.trim()) return;
@@ -1465,12 +1466,29 @@ function NotionSettingsModal({ open, onClose }) {
   );
 }
 
+// 공정표 엑셀 업로드는 대시보드의 유일한 "쓰기" 경로입니다 — 업로드 직후 한 번만 노션에 새 일정을 올려두고,
+// 이후 화면에 보이는 캘린더 자체는 노션 데이터를 그대로 미러링하는 읽기 전용입니다.
+async function pushScheduleTasksToNotion(workerUrl, databaseId, projectName, tasks) {
+  await notionEnsureSelectOption(workerUrl, databaseId, "프로젝트명", projectName);
+  const types = Array.from(new Set(tasks.map((t) => t.type)));
+  for (const type of types) {
+    await notionEnsureSelectOption(workerUrl, databaseId, "공종", type);
+  }
+  for (const t of tasks) {
+    await notionCreatePage(workerUrl, databaseId, {
+      "이름": notionTitleProp(`${projectName} · ${t.type} · ${t.label}`),
+      "프로젝트명": notionSelectProp(projectName),
+      "공종": notionSelectProp(t.type),
+      "작업내용": notionTextProp(t.label),
+      "기간": notionDateRangeProp(t.date, t.endDate),
+    });
+  }
+}
+
 function ProjectSchedule() {
   const [schedules, setSchedules] = useState({});
   const [loaded, setLoaded] = useState(false);
-  const [projectName, setProjectName] = useState("");
   const [pipelineSites, setPipelineSites] = useState([]);
-  const [saveStatus, setSaveStatus] = useState("idle");
   const [uploadStatus, setUploadStatus] = useState({ type: "idle", text: "'공종 · 날짜별 칸'으로 작성된 엑셀을 그대로 업로드하면 캘린더에 자동 반영됩니다." });
   const [monthDate, setMonthDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const fileInputRef = useRef(null);
@@ -1498,13 +1516,6 @@ function ProjectSchedule() {
       } catch (e) {
         // no pipeline sites yet
       }
-      let lastProject = null;
-      try {
-        const res2 = await window.storage.get(LAST_PROJECT_STORAGE_KEY, true);
-        if (res2 && res2.value) lastProject = res2.value;
-      } catch (e) {
-        // no saved selection yet
-      }
       if (!cancelled) {
         if (loadedSchedules) {
           // 프로젝트명이 빈 값(공백)으로 잘못 저장된 유령 키가 있으면 정리합니다
@@ -1516,12 +1527,6 @@ function ProjectSchedule() {
           setSchedules(loadedSchedules);
         }
         setPipelineSites(sites);
-        const realNames = Array.from(new Set([...sites.map((s) => s.name), ...(loadedSchedules ? Object.keys(loadedSchedules) : [])])).filter(Boolean);
-        if (lastProject && realNames.includes(lastProject)) {
-          setProjectName(lastProject);
-        } else if (realNames.length > 0) {
-          setProjectName(realNames[0]);
-        }
         setLoaded(true);
       }
     })();
@@ -1529,40 +1534,15 @@ function ProjectSchedule() {
   }, []);
 
   useEffect(() => {
-    if (!loaded || !projectName) return;
-    window.storage.set(LAST_PROJECT_STORAGE_KEY, projectName, true).catch(() => {});
-  }, [projectName, loaded]);
-
-  useEffect(() => {
     if (!loaded) return;
-    setSaveStatus("saving");
-    const t = setTimeout(async () => {
-      try {
-        await window.storage.set(PROJECT_SCHEDULE_STORAGE_KEY, JSON.stringify(schedules), true);
-        setSaveStatus("saved");
-      } catch (e) {
-        setSaveStatus("error");
-      }
+    const t = setTimeout(() => {
+      window.storage.set(PROJECT_SCHEDULE_STORAGE_KEY, JSON.stringify(schedules), true).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
   }, [schedules, loaded]);
 
-  useEffect(() => {
-    if (loaded && projectName && !schedules[projectName]) {
-      setSchedules((prev) => ({ ...prev, [projectName]: defaultProjectSchedule() }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectName, loaded]);
-
-  const current = schedules[projectName] || defaultProjectSchedule();
-  // 이제 "프로젝트 목록"과 관계형으로 연결되므로, 실제 페이지가 있는 프로젝트만 선택할 수 있어요 (+ 이미 로컬에 있던 것도 계속 보여줍니다)
-  const projectOptions = Array.from(new Set([...pipelineSites.map((s) => s.name), ...Object.keys(schedules)])).filter(Boolean);
-
-  function updateCurrent(updater) {
-    setSchedules((prev) => ({ ...prev, [projectName]: updater(prev[projectName] || defaultProjectSchedule()) }));
-  }
   // 일정 추가는 여기서 직접 못 해요 — 공정표 엑셀 업로드로만 반영됩니다.
-  // 일정 삭제는 여기서 직접 못 해요 — 노션이나 구글 캘린더에서 지우면 다음 동기화 때 대시보드에도 자동 반영됩니다.
+  // 일정 삭제는 여기서 직접 못 해요 — 노션에서 지우면 다음 동기화 때 대시보드에도 자동 반영됩니다.
   function dedupeTasks() {
     const norm = (s) => String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
     let totalRemoved = 0;
@@ -1708,17 +1688,23 @@ function ProjectSchedule() {
 
         // 엑셀 안의 프로젝트명이 노션 "프로젝트 목록"에 있는 이름과 같으면(띄어쓰기·대소문자 차이는 무시) 그 프로젝트에 자동으로 연결합니다
         const normalizeName = (s) => String(s || "").trim().replace(/\s+/g, "").toLowerCase();
-        const rawTargetName = parsedProjectName || projectName || file.name.replace(/\.(xlsx|xls)$/i, "");
+        const rawTargetName = parsedProjectName || file.name.replace(/\.(xlsx|xls)$/i, "");
         const matchedPipelineSite = pipelineSites.find((s) => normalizeName(s.name) === normalizeName(rawTargetName));
         const targetName = matchedPipelineSite ? matchedPipelineSite.name : rawTargetName;
         setSchedules((prev) => ({
           ...prev,
           [targetName]: { periodStart: ymd(periodStartDate), periodEnd: periodEndDate ? ymd(periodEndDate) : "", tasks },
         }));
-        setProjectName(targetName);
         setMonthDate(new Date(periodStartDate.getFullYear(), periodStartDate.getMonth(), 1));
         const matchNote = matchedPipelineSite ? "" : ` (참고: "프로젝트 목록"에 아직 없는 이름이라 노션 동기화는 보류돼요)`;
         setUploadStatus({ type: "ok", text: `✓ '${targetName}' 공정표 ${tasks.length}건이 캘린더에 반영되었습니다. (${file.name})${matchNote}` });
+        if (notionSync.configured) {
+          pushScheduleTasksToNotion(notionSync.workerUrl, notionSync.databaseId, targetName, tasks)
+            .then(() => notionSync.retryNow())
+            .catch((err) => {
+              setUploadStatus({ type: "err", text: `캘린더엔 반영됐지만 노션 업로드에는 실패했습니다: ${(err && err.message) || "알 수 없는 오류"}` });
+            });
+        }
       } catch (err) {
         const msgMap = {
           HEADER: "양식을 인식하지 못했습니다. '공종' 헤더와 날짜 열이 포함된 양식인지 확인해주세요.",
@@ -1760,50 +1746,21 @@ function ProjectSchedule() {
   });
 
   const notionSync = useNotionAutoSync("interior-dashboard-notion-db-schedule-v1", "033d7aff18d74536a2640b9f5190c672", async (workerUrl, databaseId) => {
-    let pushed = 0, pulled = 0, updated = 0;
+    // 이 캘린더는 노션 "공정표" DB를 읽기 전용으로 미러링합니다 — 대시보드에서 노션으로 자동으로는 아무것도 올리지 않아요.
+    // 노션에 새 일정을 올리는 유일한 경로는 "공정표 엑셀 업로드"이며, 업로드하는 그 순간에만 한 번 올라갑니다.
+    let pulled = 0;
 
-    // 모든 프로젝트에서 아직 안 올라간 일정을 모읍니다 (지금 화면에 선택된 프로젝트만이 아니라 전부)
-    const allProjectNames = Object.keys(schedules);
-    const pushTargets = [];
-    allProjectNames.forEach((pName) => {
-      (schedules[pName]?.tasks || []).forEach((t) => { if (!t.notionPageId) pushTargets.push({ ...t, __project: pName }); });
-    });
-    if (pushTargets.length > 0) {
-      // 새로 올릴 게 있으면, 먼저 "프로젝트명"과 "공종" 선택 옵션에 이 값들이 등록되어 있는지 확인하고 없으면 추가해둡니다
-      const pendingProjectNames = Array.from(new Set(pushTargets.map((t) => t.__project)));
-      for (const pName of pendingProjectNames) {
-        await notionEnsureSelectOption(workerUrl, databaseId, "프로젝트명", pName);
+    // 진행 중(완료 아님)인 프로젝트가 "프로젝트명" 선택 옵션에 항상 등록돼 있게 맞춰둡니다
+    // — 노션 "프로젝트 목록"에 새 프로젝트를 만들면 공정표 쪽 그룹도 바로 생길 수 있도록요.
+    try {
+      const res = await window.storage.get(PIPELINE_STORAGE_KEY, true);
+      const sites = res && res.value ? JSON.parse(res.value) : [];
+      const activeNames = (Array.isArray(sites) ? sites : []).filter((s) => s.stage !== "종료").map((s) => s.name);
+      for (const name of activeNames) {
+        await notionEnsureSelectOption(workerUrl, databaseId, "프로젝트명", name);
       }
-      const customTypes = Array.from(new Set(pushTargets.map((t) => t.type)));
-      for (const type of customTypes) {
-        await notionEnsureSelectOption(workerUrl, databaseId, "공종", type);
-      }
-    }
-
-    // 프로젝트별로 push+update를 진행하고, 로컬 상태도 그 프로젝트 쪽에 정확히 반영합니다
-    for (const pName of allProjectNames) {
-      const tasks = schedules[pName]?.tasks || [];
-      for (const t of tasks) {
-        const props = {
-          "이름": notionTitleProp(`${pName} · ${t.type} · ${t.label}`),
-          "프로젝트명": notionSelectProp(pName),
-          "공종": notionSelectProp(t.type),
-          "작업내용": notionTextProp(t.label),
-          "기간": notionDateRangeProp(t.date, t.endDate),
-        };
-        if (t.notionPageId) {
-          await notionUpdatePageSafe(workerUrl, t.notionPageId, props);
-          updated++;
-        } else {
-          const page = await notionCreatePage(workerUrl, databaseId, props);
-          setSchedules((prev) => {
-            const proj = prev[pName];
-            if (!proj) return prev;
-            return { ...prev, [pName]: { ...proj, tasks: proj.tasks.map((x) => (x.id === t.id ? { ...x, notionPageId: page.id } : x)) } };
-          });
-          pushed++;
-        }
-      }
+    } catch (e) {
+      // 프로젝트 목록을 아직 못 불러왔으면 조용히 건너뛰고, 다음 동기화 때 다시 시도합니다
     }
 
     // 전체 프로젝트를 통틀어 이미 알고 있는 페이지 id를 모아둡니다
@@ -1833,6 +1790,7 @@ function ProjectSchedule() {
         const proj = next[pName];
         if (!proj || !proj.tasks) return;
         // 노션에서 삭제/보관된(지금 조회 결과에 없는) 일정은 대시보드에서도 같이 지웁니다
+        // (아직 노션에 안 올라간 — 구글 캘린더 전용이거나 방금 업로드한 — 일정은 notionPageId가 없으므로 그대로 유지됩니다)
         const stillAlive = proj.tasks.filter((t) => !t.notionPageId || currentPageIds.has(t.notionPageId));
         next[pName] = { ...proj, tasks: stillAlive };
       });
@@ -1840,17 +1798,19 @@ function ProjectSchedule() {
         const existingProj = next[pName] || defaultProjectSchedule();
         next[pName] = {
           ...existingProj,
-          tasks: dedupeByKey([...existingProj.tasks, ...newTasksByProject[pName]], (t) => t.notionPageId || t.googleEventId || `${String(t.type).trim().toLowerCase()}__${String(t.label).trim().toLowerCase()}__${t.date}__${t.endDate}`),
+          // 노션에서 새로 받아온 항목을 먼저 두어, 방금 업로드해 아직 notionPageId가 없던 로컬 항목과 같은 것으로 판별되면
+          // 노션 쪽(notionPageId 포함) 항목이 우선하도록 합니다
+          tasks: dedupeByKey([...newTasksByProject[pName], ...existingProj.tasks], (t) => t.notionPageId || t.googleEventId || `${String(t.type).trim().toLowerCase()}__${String(t.label).trim().toLowerCase()}__${t.date}__${t.endDate}`),
         };
       });
       return next;
     });
-    return { pushed, pulled, updated };
+    return { pulled };
   }, loaded);
 
   return (
     <section style={{ marginBottom: 34 }}>
-      <SectionHead title="프로젝트별 공정표" note="실제 날짜 기반 캘린더 · 일정을 입력하면 캘린더에 바로 표시됩니다" />
+      <SectionHead title="사유공간 종합 공정표" note="모든 프로젝트의 일정을 한 캘린더에서 확인하세요 · 노션 공정표와 자동 동기화됩니다" />
 
       <Card style={{ padding: 16, marginBottom: 14 }}>
         <NotionStatusBadge sync={notionSync} />
@@ -2255,13 +2215,12 @@ function Sidebar({ onNavigate }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const mainItems = [
     { key: "dashboard", label: "대시보드" },
-    { key: "sites", label: "프로젝트 목록" },
+    { key: "projectSchedule", label: "프로젝트별 공정표" },
     { key: "tasks", label: "업무" },
     { key: "payments", label: "결제 확인 필요 목록" },
     { key: "schedule", label: "일정 · 공정표" },
     { key: "toolkit", label: "자재 물량 · 견적 계산기" },
     { key: "vendors", label: "공정별 거래처" },
-    { key: "byproject", label: "프로젝트별 보기" },
   ];
   const stageItems = [
     { key: "consult", label: "상담" },
@@ -5699,246 +5658,221 @@ function AsPage({ onBack }) {
 }
 
 /* ============================================================================
-   현장 목록 — 기존 Pipeline 컴포넌트를 독립 화면으로 감싸기
+   프로젝트별 공정표 — 프로젝트를 선택하면 그 프로젝트의 캘린더만 보여주는 화면
+   노션 "공정표" DB를 읽기 전용으로 미러링합니다 (대시보드의 "사유공간 종합 공정표"와 저장소를 공유)
    ============================================================================ */
 
-function SitesPage({ onBack }) {
-  return (
-    <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px 60px" }}>
-        <StageHeader onBack={onBack} eyebrow="Project List" title="프로젝트 목록" desc="파이프라인 단계별 프로젝트 현황을 확인·관리하세요." />
-        <Pipeline />
-      </div>
-    </div>
-  );
-}
+function ProjectSchedulePage({ onBack }) {
+  const [schedules, setSchedules] = useState({});
+  const [loaded, setLoaded] = useState(false);
+  const [pipelineSites, setPipelineSites] = useState([]);
+  const [projectName, setProjectName] = useState("");
+  const [monthDate, setMonthDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
-/* ============================================================================
-   프로젝트별 보기 — 한 프로젝트의 전 단계 데이터를 한 화면에서 조회
-   ============================================================================ */
-
-const BYPROJECT_STORE_KEYS = [CONSULT_STORAGE_KEY, MEASURE_STORAGE_KEY, PROPOSAL_STORAGE_KEY, ESTIMATE_STORAGE_KEY, CONTRACT_STORAGE_KEY, CONSTRUCTION_STORAGE_KEY, AS_STORAGE_KEY, PROJECT_SCHEDULE_STORAGE_KEY];
-
-async function renameProjectEverywhere(oldName, newName) {
-  for (const key of BYPROJECT_STORE_KEYS) {
-    try {
-      const res = await window.storage.get(key, true);
-      if (res && res.value) {
-        const parsed = JSON.parse(res.value);
-        if (parsed && typeof parsed === "object" && Object.prototype.hasOwnProperty.call(parsed, oldName)) {
-          const merged = { ...parsed };
-          merged[newName] = parsed[newName] ? parsed[newName] : parsed[oldName];
-          delete merged[oldName];
-          await window.storage.set(key, JSON.stringify(merged), true);
-        }
-      }
-    } catch (e) {
-      // key not created yet — nothing to rename there
-    }
-  }
-}
-
-function ByProjectPage({ onBack }) {
-  const [projectName, setProjectName] = useState(ALL_PROJECT_NAMES[0] || "");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [discoveredNames, setDiscoveredNames] = useState([]);
-  const [customProjects, setCustomProjects, customLoaded] = useProjectStore(CUSTOM_PROJECTS_STORAGE_KEY, []);
-  const [newProjectInput, setNewProjectInput] = useState("");
-  const [renaming, setRenaming] = useState(false);
-  const [renameInput, setRenameInput] = useState("");
-  const [renameBusy, setRenameBusy] = useState(false);
-
-  async function loadAll(name) {
-    setLoading(true);
-    async function getStore(key) {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let loadedSchedules = null;
       try {
-        const res = await window.storage.get(key, true);
-        return res && res.value ? JSON.parse(res.value) : {};
+        const res = await window.storage.get(PROJECT_SCHEDULE_STORAGE_KEY, true);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          if (parsed && typeof parsed === "object") loadedSchedules = parsed;
+        }
       } catch (e) {
-        return {};
+        // first run
       }
-    }
-    const [consult, measure, proposal, estimate, contract, construction, as_, schedules] = await Promise.all(BYPROJECT_STORE_KEYS.map(getStore));
-    setDiscoveredNames(Array.from(new Set([consult, measure, proposal, estimate, contract, construction, as_, schedules].flatMap((s) => Object.keys(s)))));
-    setData({
-      consult: consult[name]?.entries || [],
-      measure: measure[name]?.entries || [],
-      proposal: proposal[name]?.entries || [],
-      estimate: estimate[name]?.entries || [],
-      contract: contract[name]?.entries || [],
-      construction: construction[name] || { checklist: {}, improvements: [] },
-      as: as_[name]?.entries || [],
-      schedule: schedules[name]?.tasks || [],
+      let sites = [];
+      try {
+        const res3 = await window.storage.get(PIPELINE_STORAGE_KEY, true);
+        const parsed3 = res3 && res3.value ? JSON.parse(res3.value) : [];
+        if (Array.isArray(parsed3)) sites = parsed3;
+      } catch (e) {
+        // no pipeline sites yet
+      }
+      let lastProject = null;
+      try {
+        const res2 = await window.storage.get(LAST_PROJECT_STORAGE_KEY, true);
+        if (res2 && res2.value) lastProject = res2.value;
+      } catch (e) {
+        // no saved selection yet
+      }
+      if (!cancelled) {
+        if (loadedSchedules) setSchedules(loadedSchedules);
+        setPipelineSites(sites);
+        const activeNames = sites.filter((s) => s.stage !== "종료").map((s) => s.name);
+        if (lastProject && activeNames.includes(lastProject)) setProjectName(lastProject);
+        else if (activeNames.length > 0) setProjectName(activeNames[0]);
+        setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded || !projectName) return;
+    window.storage.set(LAST_PROJECT_STORAGE_KEY, projectName, true).catch(() => {});
+  }, [projectName, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const t = setTimeout(() => {
+      window.storage.set(PROJECT_SCHEDULE_STORAGE_KEY, JSON.stringify(schedules), true).catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+  }, [schedules, loaded]);
+
+  // 이 화면도 대시보드의 종합 공정표와 마찬가지로 노션 "공정표" DB를 읽기 전용으로 미러링합니다 (push 없음)
+  const notionSync = useNotionAutoSync("interior-dashboard-notion-db-schedule-v1", "033d7aff18d74536a2640b9f5190c672", async (workerUrl, databaseId) => {
+    let pulled = 0;
+    const known = new Set();
+    Object.values(schedules).forEach((proj) => (proj?.tasks || []).forEach((t) => { if (t.notionPageId) known.add(t.notionPageId); }));
+
+    const result = await notionQueryDatabase(workerUrl, databaseId, { page_size: 100 });
+    const currentPageIds = new Set((result.results || []).map((p) => p.id));
+    const newTasksByProject = {};
+    (result.results || []).forEach((page) => {
+      if (known.has(page.id)) return;
+      const props = page.properties;
+      const pName = notionPlainText(props["프로젝트명"]);
+      if (!pName) return;
+      const type = notionPlainText(props["공종"]) || "기타";
+      const label = notionPlainText(props["작업내용"]) || notionPlainText(props["이름"]) || "(제목 없음)";
+      const range = notionDateValue(props["기간"]);
+      if (!range || !range.start) return;
+      const task = { id: makeScheduleRowId(), type, label, date: range.start.slice(0, 10), endDate: (range.end || range.start).slice(0, 10), notionPageId: page.id };
+      (newTasksByProject[pName] = newTasksByProject[pName] || []).push(task);
+      pulled++;
     });
-    setLoading(false);
-  }
 
-  const [projectStatus, setProjectStatusState] = useState("");
-
-  async function loadStatus(name) {
-    try {
-      const res = await window.storage.get(PIPELINE_STORAGE_KEY, true);
-      const sites = res && res.value ? JSON.parse(res.value) : [];
-      const match = Array.isArray(sites) ? sites.find((s) => s.name === name) : null;
-      setProjectStatusState(match ? match.stage : "");
-    } catch (e) {
-      setProjectStatusState("");
-    }
-  }
-
-  useEffect(() => { if (projectName) loadAll(projectName); }, [projectName]);
-  useEffect(() => { if (projectName) loadStatus(projectName); }, [projectName]);
-
-  const globalProjectNames = useGlobalProjectNames();
-  const projectOptions = Array.from(new Set([...globalProjectNames, ...ALL_PROJECT_NAMES, ...discoveredNames, ...(customProjects || [])])).filter((n) => n && n !== "새 프로젝트");
-
-  function addProject() {
-    const name = newProjectInput.trim();
-    if (!name) return;
-    if (!(customProjects || []).includes(name)) {
-      setCustomProjects((prev) => [...(prev || []), name]);
-    }
-    setProjectName(name);
-    setNewProjectInput("");
-  }
-
-  function startRename() {
-    setRenameInput(projectName);
-    setRenaming(true);
-  }
-  function cancelRename() {
-    setRenaming(false);
-    setRenameInput("");
-  }
-  async function saveRename() {
-    const newName = renameInput.trim();
-    if (!newName || newName === projectName) { cancelRename(); return; }
-    setRenameBusy(true);
-    try {
-      await renameProjectEverywhere(projectName, newName);
-      setCustomProjects((prev) => {
-        const list = (prev || []).filter((p) => p !== projectName);
-        return [...list, newName];
+    setSchedules((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((pName) => {
+        const proj = next[pName];
+        if (!proj || !proj.tasks) return;
+        next[pName] = { ...proj, tasks: proj.tasks.filter((t) => !t.notionPageId || currentPageIds.has(t.notionPageId)) };
       });
-      setRenaming(false);
-      setRenameInput("");
-      setProjectName(newName);
-    } finally {
-      setRenameBusy(false);
+      Object.keys(newTasksByProject).forEach((pName) => {
+        const existingProj = next[pName] || defaultProjectSchedule();
+        next[pName] = {
+          ...existingProj,
+          tasks: dedupeByKey([...newTasksByProject[pName], ...existingProj.tasks], (t) => t.notionPageId || t.googleEventId || `${String(t.type).trim().toLowerCase()}__${String(t.label).trim().toLowerCase()}__${t.date}__${t.endDate}`),
+        };
+      });
+      return next;
+    });
+    return { pulled };
+  }, loaded);
+
+  // 드롭다운은 "완료"가 아닌(진행 중인) 프로젝트만 보여줍니다 — 새 프로젝트가 생기면 빈 캘린더가 자동으로 준비돼요
+  const activeOptions = Array.from(new Set(pipelineSites.filter((s) => s.stage !== "종료").map((s) => s.name))).filter(Boolean);
+  const current = schedules[projectName] || defaultProjectSchedule();
+
+  function goToday() { setMonthDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); }
+  function shiftMonth(delta) { setMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1)); }
+
+  const monthDays = buildMonthGrid(monthDate);
+  const todayStr = ymd(new Date());
+  const tasksByDate = {};
+  (current.tasks || []).forEach((t) => {
+    const start = parseYMD(t.date);
+    const end = parseYMD(t.endDate || t.date) || start;
+    if (!start) return;
+    const durationDays = Math.round((end - start) / 86400000) + 1;
+    const cur = new Date(start);
+    while (cur <= end) {
+      const key = ymd(cur);
+      (tasksByDate[key] = tasksByDate[key] || []).push({ ...t, isStart: ymd(cur) === t.date, isEnd: ymd(cur) === (t.endDate || t.date), durationDays });
+      cur.setDate(cur.getDate() + 1);
     }
-  }
-
-  const estimateTotal = (data?.estimate || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const checklistTotals = data ? Object.values(data.construction.checklist || {}).flat() : [];
-  const checklistDone = checklistTotals.filter((c) => c.done).length;
-
-  function MiniRow({ label, value }) {
-    return (
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12.5 }}>
-        <span style={{ color: DASH.inkSoft }}>{label}</span>
-        <span style={{ color: DASH.ink, fontWeight: 600 }}>{value}</span>
-      </div>
-    );
-  }
+  });
+  Object.keys(tasksByDate).forEach((key) => {
+    tasksByDate[key].sort((a, b) => b.durationDays - a.durationDays || a.id.localeCompare(b.id));
+  });
 
   return (
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px 60px" }}>
-        <StageHeader onBack={onBack} eyebrow="By Project" title="프로젝트별 보기" desc="한 프로젝트의 상담부터 AS까지 전 단계 기록을 한 화면에서 확인하세요. 프로젝트를 새로 추가하거나 이름을 수정할 수 있어요." />
+        <StageHeader onBack={onBack} eyebrow="Project Schedule" title="프로젝트별 공정표" desc="프로젝트를 선택하면 그 프로젝트의 공정표만 볼 수 있어요. 노션 공정표 DB와 자동으로 동기화되는 읽기 전용 화면입니다." />
 
-        <Card style={{ padding: 16, marginBottom: 18 }}>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+        <Card style={{ padding: 16, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>프로젝트 선택</label>
-              {renaming ? (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input value={renameInput} onChange={(e) => setRenameInput(e.target.value)} style={{ fontSize: 13, padding: "9px 12px", borderRadius: 8, border: `1px solid ${DASH.brass}`, background: DASH.surface, color: DASH.ink, minWidth: 220 }} />
-                  <button onClick={saveRename} disabled={renameBusy} style={{ fontSize: 12.5, fontWeight: 700, padding: "9px 14px", borderRadius: 8, border: "none", background: DASH.teal, color: "#fff", opacity: renameBusy ? 0.6 : 1 }}>{renameBusy ? "저장 중…" : "저장"}</button>
-                  <button onClick={cancelRename} style={{ fontSize: 12.5, fontWeight: 600, padding: "9px 14px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.surface, color: DASH.inkSoft }}>취소</button>
-                </div>
-              ) : (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <select value={projectName} onChange={(e) => setProjectName(e.target.value)} style={{ fontSize: 13, padding: "9px 12px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink, minWidth: 240 }}>
-                    {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <button onClick={startRename} disabled={!projectName} style={{ fontSize: 12.5, fontWeight: 600, padding: "9px 14px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.surface, color: DASH.navy }}>✎ 이름 수정</button>
-                </div>
-              )}
+              <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>프로젝트(현장) 선택</label>
+              <select value={projectName} onChange={(e) => setProjectName(e.target.value)} style={{ fontSize: 13, padding: "9px 12px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink, minWidth: 260 }}>
+                {activeOptions.length === 0 && <option value="">진행 중인 프로젝트가 없습니다</option>}
+                {activeOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>새 프로젝트 추가</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input value={newProjectInput} onChange={(e) => setNewProjectInput(e.target.value)} placeholder="프로젝트명 입력" style={{ fontSize: 12.5, padding: "9px 12px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink, width: 180 }} />
-                <button onClick={addProject} style={{ fontSize: 12.5, fontWeight: 700, padding: "9px 14px", borderRadius: 8, border: "none", background: DASH.brass, color: DASH.navy, whiteSpace: "nowrap" }}>+ 추가</button>
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>프로젝트 상태 (진행현황 단계)</label>
-              <div style={{ fontSize: 12.5, padding: "9px 12px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.brassSoft, color: DASH.navy, minWidth: 160 }}>
-                {projectStatus || "미설정"}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 10, fontSize: 11, color: DASH.inkFaint, lineHeight: 1.5 }}>
-            이름 수정은 상담·실측·제안서·견적·계약·시공·AS·공정표에 저장된 이 프로젝트의 기록을 전부 새 이름으로 옮깁니다. 프로젝트 상태는 노션의 "프로젝트 목록"에서만 바꿀 수 있어요.
+            <NotionStatusBadge sync={notionSync} />
           </div>
         </Card>
 
-        {loading || !data ? (
-          <div style={{ textAlign: "center", color: DASH.inkFaint, padding: 40 }}>불러오는 중…</div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>💬 상담 ({data.consult.length}건)</div>
-              {data.consult.slice(-3).map((e) => <MiniRow key={e.id} label={fmtYMDLabel(e.date)} value={e.content?.slice(0, 20) || "-"} />)}
-              {data.consult.length === 0 && <div style={{ fontSize: 12, color: DASH.inkFaint }}>기록 없음</div>}
-            </Card>
-
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>📐 실측 ({data.measure.length}건)</div>
-              {data.measure.slice(-3).map((e) => <MiniRow key={e.id} label={fmtYMDLabel(e.date)} value={e.content?.slice(0, 20) || "-"} />)}
-              {data.measure.length === 0 && <div style={{ fontSize: 12, color: DASH.inkFaint }}>기록 없음</div>}
-            </Card>
-
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>📄 제안서 ({data.proposal.length}건)</div>
-              {data.proposal.slice(-3).map((e) => <MiniRow key={e.id} label={e.title} value={fmtYMDLabel(e.date)} />)}
-              {data.proposal.length === 0 && <div style={{ fontSize: 12, color: DASH.inkFaint }}>기록 없음</div>}
-            </Card>
-
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>🧾 견적 (합계 {estimateTotal.toLocaleString("ko-KR")}원)</div>
-              {data.estimate.slice(-3).map((e) => <MiniRow key={e.id} label={e.title} value={`${(Number(e.amount) || 0).toLocaleString("ko-KR")}원`} />)}
-              {data.estimate.length === 0 && <div style={{ fontSize: 12, color: DASH.inkFaint }}>기록 없음</div>}
-            </Card>
-
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>✍️ 계약 ({data.contract.length}건)</div>
-              {data.contract.slice(-3).map((e) => <MiniRow key={e.id} label={fmtYMDLabel(e.date)} value={e.content?.slice(0, 20) || "-"} />)}
-              {data.contract.length === 0 && <div style={{ fontSize: 12, color: DASH.inkFaint }}>기록 없음</div>}
-            </Card>
-
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>🔨 시공 체크리스트 ({checklistDone}/{checklistTotals.length} 완료)</div>
-              <MiniRow label="개선사항" value={`${data.construction.improvements.length}건`} />
-            </Card>
-
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>🛠️ AS ({data.as.length}건)</div>
-              {data.as.slice(-3).map((e) => <MiniRow key={e.id} label={e.title} value={fmtYMDLabel(e.date)} />)}
-              {data.as.length === 0 && <div style={{ fontSize: 12, color: DASH.inkFaint }}>기록 없음</div>}
-            </Card>
-
-            <Card style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: DASH.navy, marginBottom: 8 }}>📅 공정표 일정 ({data.schedule.length}건)</div>
-              {data.schedule.slice(-3).map((e) => <MiniRow key={e.id} label={e.type} value={e.label?.slice(0, 20) || "-"} />)}
-              {data.schedule.length === 0 && <div style={{ fontSize: 12, color: DASH.inkFaint }}>기록 없음</div>}
-            </Card>
+        <Card style={{ padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={() => shiftMonth(-1)} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.navy, fontSize: 14 }}>‹</button>
+              <div style={{ fontFamily: "'Noto Serif KR', serif", fontSize: 17, fontWeight: 700, color: DASH.navy, minWidth: 110, textAlign: "center" }}>
+                {monthDate.getFullYear()}년 {monthDate.getMonth() + 1}월
+              </div>
+              <button onClick={() => shiftMonth(1)} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.navy, fontSize: 14 }}>›</button>
+            </div>
+            <button onClick={goToday} style={{ fontSize: 12, fontWeight: 700, padding: "7px 14px", borderRadius: 8, border: `1px solid ${DASH.brass}`, background: DASH.brassSoft, color: "#6B5A3E" }}>오늘</button>
           </div>
-        )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderTop: `1px solid ${DASH.line}`, borderLeft: `1px solid ${DASH.line}` }}>
+            {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+              <div key={d} style={{ padding: "8px 10px", fontSize: 11.5, fontWeight: 700, color: i === 0 ? DASH.red : i === 6 ? DASH.blue : DASH.inkSoft, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: DASH.paper }}>{d}</div>
+            ))}
+            {monthDays.map((day, idx) => {
+              const dStr = ymd(day);
+              const inMonth = day.getMonth() === monthDate.getMonth();
+              const isToday = dStr === todayStr;
+              const dayTasks = tasksByDate[dStr] || [];
+              return (
+                <div key={idx} style={{ minHeight: 92, padding: 6, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: inMonth ? DASH.surface : DASH.paper, opacity: inMonth ? 1 : 0.55 }}>
+                  <div style={{
+                    fontSize: 11.5, fontWeight: 700, marginBottom: 5,
+                    color: isToday ? "#fff" : (day.getDay() === 0 ? DASH.red : day.getDay() === 6 ? DASH.blue : DASH.ink),
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: isToday ? 20 : "auto", height: isToday ? 20 : "auto",
+                    borderRadius: "50%", background: isToday ? DASH.brass : "transparent",
+                  }}>{day.getDate()}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {dayTasks.map((t) => {
+                      const col = colorForProject(t.type);
+                      const dow = day.getDay();
+                      const roundLeft = t.isStart || dow === 0;
+                      const roundRight = t.isEnd || dow === 6;
+                      return (
+                        <div key={t.id} title={`${t.type} · ${t.label}`}
+                          style={{
+                            fontSize: 10, padding: "3px 6px", margin: 0,
+                            marginLeft: roundLeft ? 0 : -6, marginRight: roundRight ? 0 : -6,
+                            borderTopLeftRadius: roundLeft ? 5 : 0, borderBottomLeftRadius: roundLeft ? 5 : 0,
+                            borderTopRightRadius: roundRight ? 5 : 0, borderBottomRightRadius: roundRight ? 5 : 0,
+                            background: col.bg, color: col.fg,
+                            borderLeft: roundLeft ? `3px solid ${col.bar}` : "none",
+                            lineHeight: 1.3, overflow: "hidden",
+                            position: "relative", zIndex: 1,
+                          }}
+                        >
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roundLeft ? `${t.type} · ${t.label}` : " "}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {(current.tasks || []).length === 0 && (
+            <div style={{ marginTop: 10, fontSize: 12, color: DASH.inkFaint, textAlign: "center" }}>
+              {projectName ? `'${projectName}'에 등록된 공정 일정이 없습니다.` : "프로젝트를 선택해주세요."}
+            </div>
+          )}
+        </Card>
       </div>
     </div>
   );
@@ -6183,7 +6117,7 @@ function InquiryPage({ onBack }) {
 const VIEW_COMPONENTS = {
   toolkit: InteriorToolkit,
   vendors: VendorContacts,
-  sites: SitesPage,
+  projectSchedule: ProjectSchedulePage,
   tasks: TasksPage,
   payments: PaymentsPage,
   consult: ConsultPage,
@@ -6194,7 +6128,6 @@ const VIEW_COMPONENTS = {
   contract: ContractPage,
   construction: ConstructionPage,
   as: AsPage,
-  byproject: ByProjectPage,
 };
 
 function App() {
