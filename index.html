@@ -4299,14 +4299,14 @@ function SaveStatusText({ status }) {
 
 function StageHeader({ onBack, eyebrow, title, desc }) {
   return (
-    <>
+    <div style={{ minWidth: 0 }}>
       <button onClick={onBack} className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 600, padding: "8px 14px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.surface, color: DASH.navy, marginBottom: 18 }}>
         <ArrowLeft size={15} /> 대시보드로 돌아가기
       </button>
       <div style={{ fontSize: 11.5, letterSpacing: ".14em", textTransform: "uppercase", color: DASH.brass, fontWeight: 600, marginBottom: 6 }}>{eyebrow}</div>
       <h1 style={{ fontFamily: "'Noto Serif KR', serif", fontWeight: 700, fontSize: 24, margin: "0 0 6px", color: DASH.navy }}>{title}</h1>
       <p style={{ color: DASH.inkSoft, fontSize: 13.5, margin: "0 0 20px" }}>{desc}</p>
-    </>
+    </div>
   );
 }
 
@@ -4436,32 +4436,33 @@ function TasksPage({ onBack }) {
 
 function defaultPaymentsStore() { return { payments: [] }; }
 
+function copyAccountDigits(text, onDone) {
+  const digits = String(text || "").replace(/[^0-9]/g, "");
+  if (!digits) return;
+  const done = () => onDone && onDone();
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(digits).then(done).catch(() => {
+      const ta = document.createElement("textarea");
+      ta.value = digits; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+      done();
+    });
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = digits; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    done();
+  }
+}
+
 function PaymentsPage({ onBack }) {
   const [store, setStore, loaded, saveStatus] = useProjectStore(PAYMENTS_STORAGE_KEY, defaultPaymentsStore);
   const [tab, setTab] = useState("pending"); // 'pending' | 'done'
-  const [draft, setDraft] = useState({ projectName: "", content: "", dueDate: STAGE_TODAY, amount: "" });
-
-  function addPayment() {
-    if (!draft.projectName.trim() || !draft.content.trim()) return;
-    setStore((prev) => ({
-      payments: [...prev.payments, { id: makeStageId(), projectName: draft.projectName.trim(), content: draft.content.trim(), dueDate: draft.dueDate, amount: Number(draft.amount) || 0, done: false }],
-    }));
-    setDraft({ projectName: "", content: "", dueDate: STAGE_TODAY, amount: "" });
-  }
-  function toggleDone(id) {
-    setStore((prev) => ({ payments: prev.payments.map((p) => (p.id === id ? { ...p, done: !p.done } : p)) }));
-  }
-  function removePayment(id) {
-    const target = payments.find((p) => p.id === id);
-    setStore((prev) => ({ payments: prev.payments.filter((p) => p.id !== id) }));
-    if (target && target.notionPageId) notionSync.archivePage(target.notionPageId);
-  }
-
-  const payments = loaded ? store.payments : [];
-  const pending = payments.filter((p) => !p.done).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
-  const done = payments.filter((p) => p.done).sort((a, b) => (a.dueDate < b.dueDate ? 1 : -1));
-  const shown = tab === "pending" ? pending : done;
-  const pendingTotal = pending.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const [copiedId, setCopiedId] = useState(null);
   const pipelineLookup = usePipelineLookup();
 
   const notionSync = useNotionAutoSync("interior-dashboard-notion-db-payments-v1", NOTION_DB_PAYMENTS, async (workerUrl, databaseId) => {
@@ -4471,9 +4472,10 @@ function PaymentsPage({ onBack }) {
       const linkedPageId = pipelineLookup.pageIdByName.get(p.projectName);
       if (!p.notionPageId && !linkedPageId) { blocked++; continue; }
       const props = {
-        "이름": notionTitleProp(p.content),
+        "결제품목": notionTitleProp(p.content),
         "프로젝트명": notionRelationProp(linkedPageId),
-        "결제내용": notionTextProp(p.content),
+        "계좌번호 / 은행": notionTextProp(p.account),
+        "예금주": notionTextProp(p.holder),
         "결제기한": notionDateRangeProp(p.dueDate, p.dueDate),
         "결제금액": notionNumberProp(p.amount),
         "완료": { checkbox: !!p.done },
@@ -4501,7 +4503,9 @@ function PaymentsPage({ onBack }) {
       newPayments.push({
         id: makeStageId(),
         projectName: pName,
-        content: notionPlainText(props["결제내용"]) || notionPlainText(props["이름"]) || "(내용 없음)",
+        content: notionPlainText(props["결제품목"]) || "(내용 없음)",
+        account: notionPlainText(props["계좌번호 / 은행"]),
+        holder: notionPlainText(props["예금주"]),
         dueDate: range ? range.start.slice(0, 10) : STAGE_TODAY,
         amount: Number(notionPlainText(props["결제금액"])) || 0,
         done: props["완료"]?.checkbox || false,
@@ -4513,20 +4517,45 @@ function PaymentsPage({ onBack }) {
     return { pushed, pulled, updated, blocked };
   }, loaded);
 
+  function toggleDone(id) {
+    const current = payments.find((p) => p.id === id);
+    if (!current) return;
+    const nextDone = !current.done;
+    setStore((prev) => ({ payments: prev.payments.map((p) => (p.id === id ? { ...p, done: nextDone } : p)) }));
+    if (current.notionPageId && notionSync.workerUrl) {
+      notionUpdatePageSafe(notionSync.workerUrl, current.notionPageId, { "완료": { checkbox: nextDone } });
+    }
+  }
+  function removePayment(id) {
+    const target = payments.find((p) => p.id === id);
+    setStore((prev) => ({ payments: prev.payments.filter((p) => p.id !== id) }));
+    if (target && target.notionPageId) notionSync.archivePage(target.notionPageId);
+  }
+  function handleCopyAccount(p) {
+    copyAccountDigits(p.account, () => {
+      setCopiedId(p.id);
+      setTimeout(() => setCopiedId((cur) => (cur === p.id ? null : cur)), 1500);
+    });
+  }
+
+  const payments = loaded ? store.payments : [];
+  const pending = payments.filter((p) => !p.done).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+  const done = payments.filter((p) => p.done).sort((a, b) => (a.dueDate < b.dueDate ? 1 : -1));
+  const shown = tab === "pending" ? pending : done;
+  const pendingTotal = pending.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
   return (
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px 60px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <StageHeader onBack={onBack} eyebrow="Payments" title="결제 확인 필요 목록" desc="프로젝트별 결제 내용·기한·금액을 관리하고, 완료 여부로 구분해서 보세요." />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+          <StageHeader onBack={onBack} eyebrow="Payments" title="결제 확인 필요 목록" desc="프로젝트별 결제 품목·계좌·기한·금액을 확인하고, 완료 처리하면 노션에도 자동 반영됩니다." />
           <SaveStatusText status={saveStatus} />
         </div>
 
         <div style={{ marginBottom: 14 }}><NotionStatusBadge sync={notionSync} /></div>
 
-
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
           <button onClick={() => setTab("pending")} style={{ fontSize: 12.5, fontWeight: 700, padding: "8px 16px", borderRadius: 100, border: `1px solid ${tab === "pending" ? DASH.navy : DASH.line}`, background: tab === "pending" ? DASH.navy : DASH.surface, color: tab === "pending" ? "#fff" : DASH.inkSoft }}>
             미완료 ({pending.length})
           </button>
@@ -4540,11 +4569,22 @@ function PaymentsPage({ onBack }) {
           {shown.length === 0 ? (
             <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>{tab === "pending" ? "미완료 결제 항목이 없습니다." : "완료된 결제 항목이 없습니다."}</div>
           ) : shown.map((p, i) => (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", borderBottom: i === shown.length - 1 ? "none" : `1px solid ${DASH.line}`, opacity: p.done ? 0.55 : 1 }}>
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: i === shown.length - 1 ? "none" : `1px solid ${DASH.line}`, opacity: p.done ? 0.55 : 1, flexWrap: "wrap" }}>
               <span onClick={() => toggleDone(p.id)} style={{ width: 16, height: 16, borderRadius: 5, border: "1.6px solid #B9C0BC", cursor: "pointer", background: p.done ? DASH.teal : "transparent", flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: DASH.ink }}>{p.projectName}</div>
-                <div style={{ fontSize: 11, color: DASH.inkSoft, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.content}</div>
+              <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: DASH.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.projectName}</div>
+                <div style={{ fontSize: 10.5, color: DASH.inkSoft, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.content || "(품목 없음)"}</div>
+              </div>
+              <div style={{ flex: "1 1 170px", minWidth: 0 }}>
+                <div style={{ fontSize: 10.5, color: DASH.inkSoft, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.holder || "예금주 미등록"}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+                  <span style={{ fontSize: 10.5, color: DASH.inkFaint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.account || "계좌 미등록"}</span>
+                  {p.account && (
+                    <button onClick={() => handleCopyAccount(p)} title="계좌번호 숫자만 복사" style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 100, border: `1px solid ${DASH.line}`, background: copiedId === p.id ? DASH.teal : DASH.surface, color: copiedId === p.id ? "#fff" : DASH.inkSoft, flexShrink: 0, cursor: "pointer" }}>
+                      {copiedId === p.id ? "복사됨" : "복사"}
+                    </button>
+                  )}
+                </div>
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif", whiteSpace: "nowrap" }}>{(Number(p.amount) || 0).toLocaleString("ko-KR")}원</div>
