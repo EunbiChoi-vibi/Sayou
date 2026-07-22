@@ -1647,6 +1647,7 @@ function ProjectSchedule() {
   const fileInputRef = useRef(null);
   const googleSyncRef = useRef(null);
   const [dedupeMsg, setDedupeMsg] = useState("");
+  const pipelineLookup = usePipelineLookup();
 
   useEffect(() => {
     let cancelled = false;
@@ -1877,11 +1878,24 @@ function ProjectSchedule() {
   const monthDays = buildMonthGrid(monthDate);
   const todayStr = ymd(new Date());
   const tasksByDate = {};
-  Object.keys(schedules).forEach((pName) => {
+  // "프로젝트 목록"의 첫상담·실측일정·디자인미팅-1·디자인미팅-2도 종합 공정표에 함께 표시합니다(모든 프로젝트)
+  const allMilestoneEvents = {};
+  pipelineLookup.milestonesByProject.forEach((events, pName) => {
+    allMilestoneEvents[pName] = events.map((m) => ({
+      id: `milestone-${pName}-${m.kind}`,
+      type: m.kind,
+      label: "",
+      date: m.date,
+      endDate: m.endDate,
+    }));
+  });
+  const allProjectNames = new Set([...Object.keys(schedules), ...Object.keys(allMilestoneEvents)]);
+  allProjectNames.forEach((pName) => {
     if (!pName) return; // 프로젝트명이 빈 값인 유령 키는 건너뜁니다
     const proj = schedules[pName];
-    if (!proj || !proj.tasks) return;
-    proj.tasks.forEach((t) => {
+    const combinedTasks = [...(proj && proj.tasks ? proj.tasks : []), ...(allMilestoneEvents[pName] || [])];
+    if (combinedTasks.length === 0) return;
+    combinedTasks.forEach((t) => {
       const start = parseYMD(t.date);
       const end = parseYMD(t.endDate || t.date) || start;
       if (!start) return;
@@ -2027,7 +2041,7 @@ function ProjectSchedule() {
                     const roundLeft = t.isStart || dow === 0;
                     const roundRight = t.isEnd || dow === 6;
                     return (
-                      <div key={t.id} title={`${t.projectName} · ${t.type} · ${t.label}`}
+                      <div key={t.id} title={t.label ? `${t.projectName} · ${t.type} · ${t.label}` : `${t.projectName} · ${t.type}`}
                         style={{
                           fontSize: 10, padding: "3px 6px", margin: 0,
                           marginLeft: roundLeft ? 0 : -6, marginRight: roundRight ? 0 : -6,
@@ -2039,7 +2053,7 @@ function ProjectSchedule() {
                           position: "relative", zIndex: 1,
                         }}
                       >
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roundLeft ? `${t.projectName} · ${t.label}` : "\u00A0"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roundLeft ? `${t.projectName} · ${t.label || t.type}` : "\u00A0"}</span>
                       </div>
                     );
                   })}
@@ -2491,7 +2505,7 @@ function Sidebar({ onNavigate }) {
 
   return (
     <aside style={{ background: "#343033", color: "#EDEFE9", padding: "28px 18px", display: "flex", flexDirection: "column", gap: 6, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 34, padding: "4px 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginTop: -10, marginBottom: 34, padding: "4px 6px" }}>
         <img
           src={LOGO_DATA_URI}
           alt="SAYOU Architecture | Interior"
