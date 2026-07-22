@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js" crossorigin></script>
   <style>
-    html, body, #root { min-height: 100%; margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
+    html, body, #root { min-height: 100%; margin: 0; padding: 0; max-width: 100%; overflow-x: clip; }
     body { background: #F3EFE9; }
     noscript { display: block; padding: 24px; font-family: sans-serif; }
     #boot-error { display:none; padding: 24px; font-family: sans-serif; color:#A8503F; white-space:pre-wrap; }
@@ -2473,7 +2473,7 @@ function Sidebar({ onNavigate }) {
 
   return (
     <aside style={{ background: "#343033", color: "#EDEFE9", padding: "28px 18px", display: "flex", flexDirection: "column", gap: 6, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginTop: -210, marginBottom: 34, padding: "4px 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginTop: -10, marginBottom: 34, padding: "4px 6px" }}>
         <img
           src={LOGO_DATA_URI}
           alt="SAYOU Architecture | Interior"
