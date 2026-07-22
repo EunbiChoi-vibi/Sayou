@@ -146,8 +146,7 @@ const PROJECT_SCHEDULE_STORAGE_KEY = "interior-dashboard-project-schedules-v2";
 const LAST_PROJECT_STORAGE_KEY = "interior-dashboard-last-project-v1";
 const ALL_PROJECT_NAMES = pipelineData.flatMap((col) => col.sites.map((s) => s.name));
 
-/* ---- 단계별(상담/실측/제안서/견적/계약/시공/AS) + 업무 저장 키 ---- */
-const TASKS_STORAGE_KEY = "interior-dashboard-tasks-v1";
+/* ---- 단계별(상담/실측/제안서/견적/계약/시공/AS) 저장 키 ---- */
 const CONSULT_STORAGE_KEY = "interior-dashboard-consult-v1";
 const MEASURE_STORAGE_KEY = "interior-dashboard-measure-v1";
 const PROPOSAL_STORAGE_KEY = "interior-dashboard-proposal-v1";
@@ -2438,7 +2437,6 @@ function Sidebar({ onNavigate }) {
   const mainItems = [
     { key: "dashboard", label: "대시보드" },
     { key: "projectSchedule", label: "프로젝트별 공정표" },
-    { key: "tasks", label: "업무" },
     { key: "payments", label: "결제 확인 필요 목록" },
     { key: "schedule", label: "일정 · 공정표" },
     { key: "toolkit", label: "자재 물량 · 견적 계산기" },
@@ -4653,77 +4651,6 @@ function StageDeleteBtn({ onClick }) {
 }
 
 /* ============================================================================
-   업무 (오늘의 우선 업무 · 결정 필요 항목) — 실제 편집/저장 가능하도록 전환
-   ============================================================================ */
-
-function defaultTasksStore() {
-  return { tasks: [] };
-}
-
-function TaskListEditor({ items, doneKey, onToggle, onAdd, onRemove }) {
-  const [draft, setDraft] = useState({ title: "", sub: "", level: "normal", date: "" });
-  function submit() {
-    if (!draft.title.trim()) return;
-    onAdd({ id: makeStageId(), title: draft.title.trim(), sub: draft.sub.trim(), level: draft.level, date: draft.date, [doneKey]: false });
-    setDraft({ title: "", sub: "", level: "normal", date: "" });
-  }
-  return (
-    <Card>
-      <div style={{ padding: 14, borderBottom: `1px solid ${DASH.line}`, display: "grid", gridTemplateColumns: "1.4fr 1.4fr 0.8fr 0.9fr auto", gap: 8 }}>
-        <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="제목" style={stageInputStyle} />
-        <input value={draft.sub} onChange={(e) => setDraft({ ...draft, sub: e.target.value })} placeholder="현장 · 담당자" style={stageInputStyle} />
-        <select value={draft.level} onChange={(e) => setDraft({ ...draft, level: e.target.value })} style={stageInputStyle}>
-          <option value="urgent">긴급</option>
-          <option value="high">높음</option>
-          <option value="normal">보통</option>
-        </select>
-        <input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} style={stageInputStyle} />
-        <button onClick={submit} style={{ fontSize: 12.5, fontWeight: 700, padding: "8px 14px", borderRadius: 8, border: "none", background: DASH.brass, color: DASH.navy }}>+ 추가</button>
-      </div>
-      {items.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>등록된 항목이 없습니다.</div>
-      ) : items.map((item, i) => (
-        <div key={item.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 16px", borderBottom: i === items.length - 1 ? "none" : `1px solid ${DASH.line}`, opacity: item[doneKey] ? 0.5 : 1 }}>
-          <span onClick={() => onToggle(item.id)} style={{ width: 16, height: 16, borderRadius: 5, border: "1.6px solid #B9C0BC", flexShrink: 0, marginTop: 2, cursor: "pointer", background: item[doneKey] ? DASH.teal : "transparent" }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: DASH.ink, marginBottom: 3, textDecoration: item[doneKey] ? "line-through" : "none" }}>{item.title}</div>
-            <div style={{ fontSize: 11.5, color: DASH.inkSoft }}>{item.sub}</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
-            <Badge level={item.level}>{item.level === "urgent" ? "긴급" : item.level === "high" ? "높음" : "보통"}</Badge>
-            <span style={{ fontSize: 10.5, color: DASH.inkFaint }}>{item.date}</span>
-          </div>
-          <StageDeleteBtn onClick={() => onRemove(item.id)} />
-        </div>
-      ))}
-    </Card>
-  );
-}
-
-function TasksPage({ onBack }) {
-  const [store, setStore, loaded, saveStatus] = useProjectStore(TASKS_STORAGE_KEY, defaultTasksStore);
-
-  function addTask(t) { setStore((prev) => ({ ...prev, tasks: [...prev.tasks, t] })); }
-  function toggleTask(id) { setStore((prev) => ({ ...prev, tasks: prev.tasks.map((x) => (x.id === id ? { ...x, done: !x.done } : x)) })); }
-  function removeTask(id) { setStore((prev) => ({ ...prev, tasks: prev.tasks.filter((x) => x.id !== id) })); }
-
-  return (
-    <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: "28px 24px 60px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <StageHeader onBack={onBack} eyebrow="Tasks" title="업무" desc="오늘의 우선 업무를 관리하세요." />
-          <SaveStatusText status={saveStatus} />
-        </div>
-        {!loaded ? null : (
-          <TaskListEditor items={store.tasks} doneKey="done" onToggle={toggleTask} onAdd={addTask} onRemove={removeTask} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ============================================================================
    결제 확인 필요 목록 — 프로젝트명 · 결제내용 · 결제기한 · 결제금액, 완료/미완료 탭
    ============================================================================ */
 
@@ -6522,7 +6449,6 @@ const VIEW_COMPONENTS = {
   toolkit: InteriorToolkit,
   vendors: VendorContacts,
   projectSchedule: ProjectSchedulePage,
-  tasks: TasksPage,
   payments: PaymentsPage,
   consult: ConsultPage,
   measure: MeasurePage,
