@@ -5301,6 +5301,17 @@ function DepositStatusPage({ onBack }) {
     retryNow: fetchEntries,
   };
 
+  // 계약 보증금·착공금·중도금·잔금 4개가 전부 등록돼 있고, 숨긴 항목을 빼고는 전부 입금완료면
+  // "다 끝난 프로젝트"로 보고 카드를 목록에서 자동으로 숨깁니다. 하나라도 노션에 아직
+  // 등록 안 됐으면(=확인이 안 됐으면) 완료로 치지 않습니다.
+  function isFullyPaid(siteEntries) {
+    return DEPOSIT_TYPES.every((type) => {
+      const e = siteEntries.find((x) => x.type === type);
+      if (!e) return false;
+      return e.hidden || e.status === "입금완료";
+    });
+  }
+
   // 입금예정일·상태·숨김만 씁니다 — 금액은 노션에만 있는 값이라 여기서 절대 만들거나 바꾸지 않고,
   // 노션에 항목 자체가 없으면(금액이 아직 입력 안 됐으면) 쓰기를 시도하지 않습니다.
   async function commitField(projectName, type, patch) {
@@ -5347,7 +5358,7 @@ function DepositStatusPage({ onBack }) {
           </Card>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {pipelineLookup.sites.map((site) => {
+            {pipelineLookup.sites.filter((site) => !isFullyPaid(entries.filter((e) => e.projectName === site.name))).map((site) => {
               const siteEntries = entries.filter((e) => e.projectName === site.name);
               const unpaidTotal = siteEntries.filter((e) => e.status !== "입금완료" && !e.hidden).reduce((s, e) => s + (Number(e.amount) || 0), 0);
               const isExpanded = expandedProject === site.name;
@@ -5390,6 +5401,12 @@ function DepositStatusPage({ onBack }) {
                 </Card>
               );
             })}
+            {(() => {
+              const fullyPaidCount = pipelineLookup.sites.filter((site) => isFullyPaid(entries.filter((e) => e.projectName === site.name))).length;
+              return fullyPaidCount > 0 ? (
+                <div style={{ fontSize: 11.5, color: DASH.inkFaint, textAlign: "center", padding: "6px 0" }}>입금 완료된 프로젝트 {fullyPaidCount}건은 목록에서 숨겨져 있습니다.</div>
+              ) : null;
+            })()}
           </div>
         )}
       </div>
