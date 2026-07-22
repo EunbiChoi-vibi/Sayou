@@ -303,11 +303,15 @@ function Card({ children, style, onClick }) {
 /* ---------------------------------- dashboard sections ---------------------------------- */
 
 // 오늘의 일정 — 공정표·상담·실측·계약·AS 중 오늘 날짜에 걸리는 항목을 노션에서 모아 보여줍니다 (읽기 전용)
+// 상담예정일·실측예정일·디자인미팅-1·2는 별도 DB가 아니라 "프로젝트 목록"의 첫상담/실측일정/디자인미팅-1/디자인미팅-2
+// 컬럼에서 직접 가져옵니다(프로젝트별 공정표 캘린더와 같은 소스).
 const TODAY_SCHEDULE_SOURCES = [
   { db: "033d7aff18d74536a2640b9f5190c672", dateProp: "기간", labelProp: "작업내용", relationProp: null, kind: "공정" },
   { db: NOTION_DB_CONSULT, dateProp: "상담일", labelProp: "상담내용", relationProp: "프로젝트명 1", kind: "상담" },
-  // 실측 일정은 별도 "실측 보고서" DB가 아니라 "프로젝트 목록"에 있는 실측일정 컬럼에서 직접 가져옵니다
+  { db: "7523128efdd84be1936343c9e28d9fad", dateProp: "첫상담", relationProp: null, kind: "상담예정", fixedLabel: "상담 예정" },
   { db: "7523128efdd84be1936343c9e28d9fad", dateProp: "실측일정", relationProp: null, kind: "실측", fixedLabel: "실측 방문 예정" },
+  { db: "7523128efdd84be1936343c9e28d9fad", dateProp: "디자인미팅-1", relationProp: null, kind: "디자인미팅 1차", fixedLabel: "디자인미팅 1차" },
+  { db: "7523128efdd84be1936343c9e28d9fad", dateProp: "디자인미팅-2", relationProp: null, kind: "디자인미팅 2차", fixedLabel: "디자인미팅 2차" },
   { db: NOTION_DB_CONTRACT, dateProp: "계약일", labelProp: "내용", relationProp: "프로젝트명 1", kind: "계약" },
   { db: NOTION_DB_AS, dateProp: "AS일정", labelProp: "특이사항", titleProp: "AS사항", relationProp: "프로젝트명", kind: "AS" },
 ];
@@ -328,14 +332,20 @@ function TodaySchedule() {
       if (!workerUrl) { if (!cancelled) setLoading(false); return; }
 
       const today = ymd(new Date());
-      const results = await Promise.all(
-        TODAY_SCHEDULE_SOURCES.map((s) => notionQueryDatabase(workerUrl, s.db, { page_size: 100 }).catch(() => ({ results: [] })))
+      // 같은 DB(예: "프로젝트 목록")를 여러 소스가 같이 쓰는 경우, DB당 한 번씩만 조회해서 재사용합니다
+      const uniqueDbIds = Array.from(new Set(TODAY_SCHEDULE_SOURCES.map((s) => s.db)));
+      const resultsByDb = new Map();
+      await Promise.all(
+        uniqueDbIds.map(async (dbId) => {
+          const result = await notionQueryDatabase(workerUrl, dbId, { page_size: 100 }).catch(() => ({ results: [] }));
+          resultsByDb.set(dbId, result);
+        })
       );
       if (cancelled) return;
 
       const todays = [];
-      results.forEach((result, i) => {
-        const s = TODAY_SCHEDULE_SOURCES[i];
+      TODAY_SCHEDULE_SOURCES.forEach((s) => {
+        const result = resultsByDb.get(s.db) || { results: [] };
         (result.results || []).forEach((page) => {
           const props = page.properties;
           const range = notionDateValue(props[s.dateProp]);
