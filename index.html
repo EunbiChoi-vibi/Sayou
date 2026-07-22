@@ -4889,7 +4889,8 @@ function ProposalPage({ onBack }) {
   
   const pipelineLookup = usePipelineLookup();
   const globalProjectNames = useGlobalProjectNames();
-  
+  const options = Array.from(new Set([...globalProjectNames, ...ALL_PROJECT_NAMES])).filter((n) => n);
+
   // Notion DB ID와 Worker URL 로드
   useEffect(() => {
     (async () => {
@@ -4903,6 +4904,13 @@ function ProposalPage({ onBack }) {
       } catch (e) {}
     })();
   }, []);
+
+  // 노션에서 프로젝트 목록을 불러오기 전엔 선택지가 비어 있으므로, 목록이 채워지면 첫 번째 프로젝트를 기본 선택합니다
+  useEffect(() => {
+    if (options.length === 0) return;
+    if (!projectName || !options.includes(projectName)) setProjectName(options[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.join("|")]);
 
   // 프로젝트 선택 시 노션에서 제안서 조회
   useEffect(() => {
@@ -4932,12 +4940,15 @@ function ProposalPage({ onBack }) {
         const items = (result.results || []).map((page) => {
           const props = page.properties;
           const range = notionDateValue(props["날짜"]);
+          const files = (props["PDF"]?.files || [])
+            .map((f) => ({ name: f.name || "PDF 파일", url: (f.file && f.file.url) || (f.external && f.external.url) || "" }))
+            .filter((f) => f.url);
           return {
             id: page.id,
             title: notionPlainText(props["이름"]) || "(제목 없음)",
             date: range ? range.start.slice(0, 10) : "",
             content: notionPlainText(props["내용"]) || "",
-            link: props["링크"]?.url || "",
+            files,
             notionPageId: page.id
           };
         });
@@ -4949,9 +4960,7 @@ function ProposalPage({ onBack }) {
         setLoading(false);
       }
     })();
-  }, [projectName, dbId, workerUrl, pipelineLookup]);
-
-  const options = Array.from(new Set([...globalProjectNames, ...ALL_PROJECT_NAMES])).filter((n) => n);
+  }, [projectName, dbId, workerUrl, pipelineLookup.pageIdByName]);
 
   return (
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
@@ -4964,9 +4973,9 @@ function ProposalPage({ onBack }) {
         <Card style={{ padding: 16, marginBottom: 14 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>프로젝트(현장) 선택</label>
-            <select 
-              value={projectName} 
-              onChange={(e) => setProjectName(e.target.value)} 
+            <select
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
               style={{ fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink }}
             >
               {options.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -4981,93 +4990,76 @@ function ProposalPage({ onBack }) {
           </Card>
         )}
 
-        <Card style={{ padding: 16, marginBottom: 14, background: DASH.brassSoft }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: DASH.navy, marginBottom: 6 }}>📋 Notion 제안서 DB</div>
-          <p style={{ fontSize: 12, color: DASH.inkSoft, lineHeight: 1.5, marginBottom: 10 }}>
-            제안서는 Notion에서 직접 관리합니다. 아래 버튼에서 Notion으로 이동하여 새 제안서를 추가할 수 있습니다.
-          </p>
-          <a 
-            href={`https://www.notion.so/${NOTION_DB_PROPOSAL}`} 
-            target="_blank" 
-            rel="noreferrer"
-            style={{ 
-              fontSize: 12.5, 
-              fontWeight: 700, 
-              padding: "10px 16px", 
-              borderRadius: 8, 
-              border: "none", 
-              background: DASH.navy, 
-              color: DASH.brass, 
-              textDecoration: "none",
-              display: "inline-block",
-              cursor: "pointer"
-            }}
-          >
-            🔗 Notion 제안서 DB 열기
-          </a>
-        </Card>
+        {loading && (
+          <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>
+            조회 중...
+          </div>
+        )}
 
-        <Card>
-          {loading && (
-            <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>
-              조회 중...
-            </div>
-          )}
-          
-          {!loading && proposals.length === 0 && (
+        {!loading && proposals.length === 0 && (
+          <Card style={{ padding: 0 }}>
             <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>
               {projectName}의 제안서가 없습니다.
             </div>
-          )}
-          
-          {!loading && proposals.length > 0 && (
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, padding: "12px 16px", background: DASH.paperSoft, borderBottom: `1px solid ${DASH.line}`, fontWeight: 700, fontSize: 12 }}>
-                <div>제안서</div>
-                <div style={{ textAlign: "center" }}>날짜</div>
-                <div style={{ textAlign: "right" }}>작업</div>
-              </div>
-              
-              {proposals.map((p, i) => (
-                <div key={p.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, alignItems: "center", padding: "12px 16px", borderBottom: i === proposals.length - 1 ? "none" : `1px solid ${DASH.line}` }}>
-                  <div>
-                    <button
-                      onClick={() => window.open(`https://www.notion.so/${p.notionPageId.replace(/-/g, "")}`, "_blank")}
-                      style={{
-                        textAlign: "left",
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        color: DASH.blue,
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: 0,
-                        textDecoration: "underline"
-                      }}
-                    >
-                      {p.title}
-                    </button>
-                    {p.content && (
-                      <div style={{ fontSize: 11.5, color: DASH.inkFaint, marginTop: 4, lineHeight: 1.4 }}>
-                        {p.content.slice(0, 60)}{p.content.length > 60 ? "..." : ""}
-                      </div>
-                    )}
+          </Card>
+        )}
+
+        {!loading && proposals.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+            {proposals.map((p) => (
+              <div key={p.id} style={{ border: `1px solid ${DASH.line}`, borderRadius: 10, overflow: "hidden", background: DASH.surface, display: "flex", flexDirection: "column" }}>
+                {p.files.length > 0 ? (
+                  <a
+                    href={p.files[0].url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={p.files[0].name}
+                    style={{ height: 110, background: DASH.paper, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", borderBottom: `1px solid ${DASH.line}` }}
+                  >
+                    <span style={{ fontSize: 30 }}>📄</span>
+                  </a>
+                ) : (
+                  <div style={{ height: 56, background: DASH.paper, display: "flex", alignItems: "center", justifyContent: "center", color: DASH.inkFaint, fontSize: 11, borderBottom: `1px solid ${DASH.line}` }}>
+                    PDF 없음
                   </div>
-                  <div style={{ fontSize: 12, color: DASH.inkSoft, textAlign: "center" }}>
-                    {p.date ? fmtYMDLabel(p.date) : "-"}
-                  </div>
-                  <div style={{ fontSize: 12, textAlign: "right" }}>
-                    {p.link && (
-                      <a href={p.link} target="_blank" rel="noreferrer" style={{ color: DASH.blue, textDecoration: "none" }}>
-                        🔗 링크
-                      </a>
-                    )}
-                  </div>
+                )}
+                <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+                  <button
+                    onClick={() => window.open(`https://www.notion.so/${p.notionPageId.replace(/-/g, "")}`, "_blank")}
+                    title="Notion에서 열기"
+                    style={{
+                      textAlign: "left",
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      color: DASH.navy,
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    {p.title}
+                  </button>
+                  {p.date && <div style={{ fontSize: 11.5, color: DASH.inkFaint }}>{fmtYMDLabel(p.date)}</div>}
+                  {p.content && (
+                    <div style={{ fontSize: 11.5, color: DASH.inkSoft, lineHeight: 1.4 }}>
+                      {p.content.slice(0, 60)}{p.content.length > 60 ? "..." : ""}
+                    </div>
+                  )}
+                  {p.files.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: "auto", paddingTop: 4 }}>
+                      {p.files.map((f, idx) => (
+                        <a key={idx} href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: DASH.blue, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          📎 {f.name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
