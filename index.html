@@ -2319,7 +2319,7 @@ function Sidebar({ onNavigate }) {
         <img
           src={LOGO_DATA_URI}
           alt="SAYOU Architecture | Interior"
-          style={{ width: "100%", maxWidth: 91, height: "auto", display: "block", objectFit: "contain", margin: "0 auto" }}
+          style={{ width: "100%", maxWidth: 182, height: "auto", display: "block", objectFit: "contain", margin: "0 auto" }}
         />
       </div>
 
@@ -4076,7 +4076,6 @@ function InteriorToolkit({ onBack }) {
 const VENDOR_DIR_STORAGE_KEY = "interior-dashboard-vendor-directory-v4";
 
 function makeVendorRowId() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
-function makeCategoryId() { return "cat_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
 
 const VENDOR_SEED_CATEGORIES = [
   { id: "cat_demolition", name: "철거" },
@@ -4108,29 +4107,16 @@ function defaultVendorState() {
   });
   return { categories: VENDOR_SEED_CATEGORIES.map((c) => ({ ...c })), contacts };
 }
-function emptyDraft() { return { company: "", manager: "", phone: "", email: "", account: "", note: "" }; }
-const vendorInputStyle = { width: "100%", fontFamily: "'Pretendard'", fontSize: 12.5, padding: "7px 9px", borderRadius: 6, border: `1px solid ${DASH.line}`, background: DASH.surface, color: DASH.ink, outline: "none" };
 
-function buildSettleText(site, amount, account, holder) {
-  const num = String(amount || "").replace(/[^0-9.-]/g, "");
-  const amountLabel = num ? Number(num).toLocaleString("ko-KR") : "";
-  return `[${site}]\n금액 : ${amountLabel}원\n계좌 : ${account}\n예금주 : ${holder}\n세금계산서 발행 완료`;
+function vendorCategoryIdForName(name) {
+  const seed = VENDOR_SEED_CATEGORIES.find((c) => c.name === name);
+  return seed ? seed.id : "cat_" + name.replace(/\s+/g, "_");
 }
 
 function VendorContacts({ onBack }) {
   const [vendorState, setVendorState] = useState(defaultVendorState);
   const [loaded, setLoaded] = useState(false);
   const [activeCatId, setActiveCatId] = useState(VENDOR_SEED_CATEGORIES[0].id);
-  const [saveStatus, setSaveStatus] = useState("idle");
-  const [newDraft, setNewDraft] = useState(emptyDraft);
-  const [editingId, setEditingId] = useState(null);
-  const [editDraft, setEditDraft] = useState(emptyDraft);
-  const [tabEditMode, setTabEditMode] = useState(false);
-  const [newCategoryInput, setNewCategoryInput] = useState("");
-  const [settleTargetId, setSettleTargetId] = useState(null);
-  const [settleForm, setSettleForm] = useState({ siteName: "", amount: "" });
-  const [toast, setToast] = useState(null);
-  const toastTimer = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -4155,191 +4141,62 @@ function VendorContacts({ onBack }) {
 
   useEffect(() => {
     if (!loaded) return;
-    setSaveStatus("saving");
-    const t = setTimeout(async () => {
+    (async () => {
       try {
         await window.storage.set(VENDOR_DIR_STORAGE_KEY, JSON.stringify(vendorState), true);
-        setSaveStatus("saved");
-      } catch (e) {
-        setSaveStatus("error");
-      }
-    }, 600);
-    return () => clearTimeout(t);
+      } catch (e) {}
+    })();
   }, [vendorState, loaded]);
-
-  function showToast(msg) {
-    setToast(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2600);
-  }
-  function fallbackCopy(text, cb) {
-    const ta = document.createElement("textarea");
-    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand("copy"); } catch (e) {}
-    document.body.removeChild(ta);
-    cb();
-  }
 
   const { categories, contacts } = vendorState;
   const activeCat = categories.find((c) => c.id === activeCatId) || categories[0];
   const list = (activeCat && contacts[activeCat.id]) || [];
 
-  function switchCategory(id) {
-    setActiveCatId(id);
-    setNewDraft(emptyDraft());
-    setEditingId(null);
-    setEditDraft(emptyDraft());
-    setSettleTargetId(null);
-  }
-
-  function addCategory() {
-    const name = newCategoryInput.trim();
-    if (!name) return;
-    const id = makeCategoryId();
-    setVendorState((prev) => ({
-      categories: [...prev.categories, { id, name }],
-      contacts: { ...prev.contacts, [id]: [] },
-    }));
-    setNewCategoryInput("");
-    setActiveCatId(id);
-  }
-  function renameCategory(id, name) {
-    setVendorState((prev) => ({ ...prev, categories: prev.categories.map((c) => (c.id === id ? { ...c, name } : c)) }));
-  }
-  function deleteCategory(id) {
-    setVendorState((prev) => {
-      if (prev.categories.length <= 1) return prev;
-      const nextCategories = prev.categories.filter((c) => c.id !== id);
-      const nextContacts = { ...prev.contacts };
-      delete nextContacts[id];
-      if (activeCatId === id) setActiveCatId(nextCategories[0].id);
-      return { categories: nextCategories, contacts: nextContacts };
-    });
-  }
-
-  function commitAdd() {
-    if (!activeCat) return;
-    if (!newDraft.company.trim() && !newDraft.manager.trim() && !newDraft.phone.trim()) return;
-    setVendorState((prev) => ({
-      ...prev,
-      contacts: { ...prev.contacts, [activeCat.id]: [...(prev.contacts[activeCat.id] || []), { id: makeVendorRowId(), ...newDraft }] },
-    }));
-    setNewDraft(emptyDraft());
-  }
-  function startEdit(c) {
-    setEditingId(c.id);
-    setEditDraft({ company: c.company, manager: c.manager, phone: c.phone, email: c.email, account: c.account || "", note: c.note });
-    setSettleTargetId(null);
-  }
-  function cancelEdit() {
-    setEditingId(null);
-    setEditDraft(emptyDraft());
-  }
-  function commitEdit(catId, id) {
-    setVendorState((prev) => ({
-      ...prev,
-      contacts: { ...prev.contacts, [catId]: prev.contacts[catId].map((c) => (c.id === id ? { ...c, ...editDraft } : c)) },
-    }));
-    setEditingId(null);
-    setEditDraft(emptyDraft());
-  }
-  function removeContact(catId, id) {
-    const target = (contacts[catId] || []).find((c) => c.id === id);
-    setVendorState((prev) => ({ ...prev, contacts: { ...prev.contacts, [catId]: prev.contacts[catId].filter((c) => c.id !== id) } }));
-    if (editingId === id) cancelEdit();
-    if (settleTargetId === id) setSettleTargetId(null);
-    if (target && target.notionPageId) notionSync.archivePage(target.notionPageId);
-  }
-
-  function openSettle(c) {
-    setSettleTargetId(c.id);
-    setSettleForm({ siteName: "", amount: "" });
-    setEditingId(null);
-  }
-  function closeSettle() {
-    setSettleTargetId(null);
-  }
-  function copySettle(c) {
-    const holder = c.manager || c.company || "";
-    const text = buildSettleText(settleForm.siteName || "", settleForm.amount, c.account || "", holder);
-    const done = () => showToast("결제 양식이 복사되었습니다.");
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
-    } else {
-      fallbackCopy(text, done);
-    }
-  }
+  // 이 화면은 노션 "거래처" 데이터베이스를 그대로 보여주는 읽기 전용 화면입니다.
+  // 대시보드에서는 노션으로 아무것도 보내지 않아요(push 없음) — 오직 노션 → 대시보드로만 가져옵니다.
   const notionSync = useNotionAutoSync("interior-dashboard-notion-db-vendor-v1", "28afc9d8c57b4b5c86d24f22e363781b", async (workerUrl, databaseId) => {
-    let pushed = 0, pulled = 0, updated = 0;
-    const justPushedIds = [];
-    for (const cat of categories) {
-      const list = contacts[cat.id] || [];
-      for (const c of list) {
-        const props = {
-          "이름": notionTitleProp(c.company || c.manager || "(이름없음)"),
-          "공정": notionSelectProp(cat.name),
-          "담당자": notionTextProp(c.manager),
-          "연락처": notionTextProp(c.phone),
-          "이메일": notionEmailProp(c.email),
-          "계좌": notionTextProp(c.account),
-          "비고": notionTextProp(c.note),
-        };
-        if (c.notionPageId) {
-          await notionUpdatePageSafe(workerUrl, c.notionPageId, props);
-          updated++;
-        } else {
-          const page = await notionCreatePage(workerUrl, databaseId, props);
-          pushed++;
-          justPushedIds.push(page.id);
-          setVendorState((prev) => ({
-            ...prev,
-            contacts: { ...prev.contacts, [cat.id]: prev.contacts[cat.id].map((x) => (x.id === c.id ? { ...x, notionPageId: page.id } : x)) },
-          }));
-        }
-      }
+    let categoryNames = [];
+    try {
+      const db = await notionFetch(workerUrl, `/v1/databases/${databaseId}`, { method: "GET" });
+      const prop = db.properties && db.properties["공정"];
+      categoryNames = prop && prop.type === "select" ? (prop.select.options || []).map((o) => o.name) : [];
+    } catch (e) {
+      // 실패해도 조용히 넘어가요 — 다음 동기화 때 다시 시도됩니다
     }
-    const knownIds = new Set(justPushedIds);
-    Object.values(contacts).forEach((list) => list.forEach((c) => { if (c.notionPageId) knownIds.add(c.notionPageId); }));
+    if (!categoryNames.length) categoryNames = VENDOR_SEED_CATEGORIES.map((c) => c.name);
+
     const result = await notionQueryDatabase(workerUrl, databaseId, { page_size: 100 });
-    const byCategoryName = {};
-    categories.forEach((c) => { byCategoryName[c.name] = c.id; });
-    const newCategories = [...categories];
-    const additions = {};
-    (result.results || []).forEach((page) => {
-      if (knownIds.has(page.id)) return;
+    const pages = result.results || [];
+
+    const newCategories = categoryNames.map((name) => ({ id: vendorCategoryIdForName(name), name }));
+    const nextContacts = {};
+    newCategories.forEach((c) => { nextContacts[c.id] = []; });
+
+    let pulled = 0;
+    pages.forEach((page) => {
       const props = page.properties;
       const catName = notionPlainText(props["공정"]) || "기타";
-      let catId = byCategoryName[catName];
-      if (!catId) {
-        catId = makeCategoryId();
-        byCategoryName[catName] = catId;
+      const catId = vendorCategoryIdForName(catName);
+      if (!nextContacts[catId]) {
         newCategories.push({ id: catId, name: catName });
+        nextContacts[catId] = [];
       }
-      (additions[catId] = additions[catId] || []).push({
-        id: makeVendorRowId(),
+      nextContacts[catId].push({
+        id: page.id,
+        notionPageId: page.id,
         company: notionPlainText(props["이름"]),
         manager: notionPlainText(props["담당자"]),
         phone: notionPlainText(props["연락처"]),
         email: notionPlainText(props["이메일"]),
         account: notionPlainText(props["계좌"]),
         note: notionPlainText(props["비고"]),
-        notionPageId: page.id,
       });
       pulled++;
     });
-    if (pulled > 0) {
-      setVendorState((prev) => {
-        const nextContacts = { ...prev.contacts };
-        Object.keys(additions).forEach((catId) => {
-          nextContacts[catId] = dedupeByKey([...(nextContacts[catId] || []), ...additions[catId]], (c) => c.notionPageId || c.id);
-        });
-        return { categories: newCategories, contacts: nextContacts };
-      });
-    }
-    return { pushed, pulled, updated };
-  }, loaded);
 
+    setVendorState({ categories: newCategories, contacts: nextContacts });
+    return { pushed: 0, pulled };
+  }, loaded);
 
   return (
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif", position: "relative" }}>
@@ -4360,7 +4217,7 @@ function VendorContacts({ onBack }) {
           <div>
             <div style={{ fontSize: 11.5, letterSpacing: ".14em", textTransform: "uppercase", color: DASH.brass, fontWeight: 600, marginBottom: 6 }}>Vendor Directory</div>
             <h1 style={{ fontFamily: "'Noto Serif KR', serif", fontWeight: 700, fontSize: 24, margin: "0 0 6px", color: DASH.navy }}>공정별 거래처</h1>
-            <p style={{ color: DASH.inkSoft, fontSize: 13.5, margin: "0 0 20px" }}>공정 카테고리별로 자주 쓰는 거래처 연락처를 정리해두세요. 입력 내용은 자동 저장됩니다.</p>
+            <p style={{ color: DASH.inkSoft, fontSize: 13.5, margin: "0 0 20px" }}>노션 "거래처" 데이터베이스를 그대로 보여주는 읽기 전용 화면입니다. 등록·수정은 노션에서 직접 해주세요.</p>
           </div>
 
         </div>
@@ -4371,7 +4228,7 @@ function VendorContacts({ onBack }) {
           {categories.map((c) => (
             <button
               key={c.id}
-              onClick={() => switchCategory(c.id)}
+              onClick={() => setActiveCatId(c.id)}
               style={{
                 fontSize: 12.5, fontWeight: 600, padding: "8px 16px", borderRadius: 100,
                 border: `1px solid ${activeCatId === c.id ? DASH.navy : DASH.line}`,
@@ -4385,120 +4242,43 @@ function VendorContacts({ onBack }) {
         </div>
 
         {activeCat && (
-          <>
-            <Card style={{ padding: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: DASH.navy }}>{activeCat.name} 거래처 목록</div>
-                <span style={{ fontSize: 11.5, color: saveStatus === "error" ? DASH.red : DASH.inkFaint, minWidth: 70, textAlign: "right" }}>
-                  {saveStatus === "saving" ? "저장 중…" : saveStatus === "saved" ? "✓ 자동 저장됨" : saveStatus === "error" ? "저장 실패" : ""}
-                </span>
-              </div>
+          <Card style={{ padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: DASH.navy }}>{activeCat.name} 거래처 목록</div>
+            </div>
 
-              {list.length === 0 ? (
-                <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "40px 0" }}>
-                  등록된 거래처가 없습니다. 위 입력창에 정보를 입력하고 '+ 거래처 추가'를 눌러주세요.
-                </div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 780 }}>
-                    <thead>
-                      <tr>
-                        {["업체명", "담당자", "연락처", "이메일", "계좌", "비고"].map((h) => (
-                          <th key={h} style={{ textAlign: "left", fontSize: 11, color: DASH.inkSoft, fontWeight: 700, padding: "8px 8px", borderBottom: `1.5px solid ${DASH.line}` }}>{h}</th>
-                        ))}
+            {list.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "40px 0" }}>
+                등록된 거래처가 없습니다.
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 780 }}>
+                  <thead>
+                    <tr>
+                      {["업체명", "담당자", "연락처", "이메일", "계좌", "비고"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", fontSize: 11, color: DASH.inkSoft, fontWeight: 700, padding: "8px 8px", borderBottom: `1.5px solid ${DASH.line}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((c) => (
+                      <tr key={c.id}>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.ink, fontWeight: 600 }}>{c.company || "-"}</td>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.manager || "-"}</td>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.ink, fontFamily: "'Pretendard'" }}>{c.phone || "-"}</td>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.email || "-"}</td>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.account || "-"}</td>
+                        <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.note || "-"}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {list.map((c) => {
-                        const isEditing = editingId === c.id;
-                        const isSettling = settleTargetId === c.id;
-                        return (
-                          <Fragment key={c.id}>
-                            <tr>
-                              {isEditing ? (
-                                <>
-                                  <td style={{ padding: "6px 8px", borderBottom: `1px solid ${DASH.line}` }}><input value={editDraft.company} onChange={(e) => setEditDraft({ ...editDraft, company: e.target.value })} placeholder="업체명" style={vendorInputStyle} /></td>
-                                  <td style={{ padding: "6px 8px", borderBottom: `1px solid ${DASH.line}` }}><input value={editDraft.manager} onChange={(e) => setEditDraft({ ...editDraft, manager: e.target.value })} placeholder="담당자" style={vendorInputStyle} /></td>
-                                  <td style={{ padding: "6px 8px", borderBottom: `1px solid ${DASH.line}` }}><input value={editDraft.phone} onChange={(e) => setEditDraft({ ...editDraft, phone: e.target.value })} placeholder="010-0000-0000" style={vendorInputStyle} /></td>
-                                  <td style={{ padding: "6px 8px", borderBottom: `1px solid ${DASH.line}` }}><input value={editDraft.email} onChange={(e) => setEditDraft({ ...editDraft, email: e.target.value })} placeholder="email@example.com" style={vendorInputStyle} /></td>
-                                  <td style={{ padding: "6px 8px", borderBottom: `1px solid ${DASH.line}` }}><input value={editDraft.account} onChange={(e) => setEditDraft({ ...editDraft, account: e.target.value })} placeholder="은행 · 계좌번호" style={vendorInputStyle} /></td>
-                                  <td style={{ padding: "6px 8px", borderBottom: `1px solid ${DASH.line}` }}><input value={editDraft.note} onChange={(e) => setEditDraft({ ...editDraft, note: e.target.value })} placeholder="비고" style={vendorInputStyle} /></td>
-                                  <td style={{ padding: "6px 8px", borderBottom: `1px solid ${DASH.line}`, whiteSpace: "nowrap" }}>
-                                    <button onClick={() => commitEdit(activeCat.id, c.id)} title="저장" style={{ padding: "5px 10px", borderRadius: 6, border: "none", background: DASH.teal, color: "#fff", fontSize: 11.5, fontWeight: 700, marginRight: 4 }}>저장</button>
-                                    <button onClick={cancelEdit} title="취소" style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${DASH.line}`, background: DASH.surface, color: DASH.inkSoft, fontSize: 11.5 }}>취소</button>
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.ink, fontWeight: 600 }}>{c.company || "-"}</td>
-                                  <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.manager || "-"}</td>
-                                  <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.ink, fontFamily: "'Pretendard'" }}>{c.phone || "-"}</td>
-                                  <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.email || "-"}</td>
-                                  <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.account || "-"}</td>
-                                  <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, color: DASH.inkSoft }}>{c.note || "-"}</td>
-                                  <td style={{ padding: "9px 8px", borderBottom: `1px solid ${DASH.line}`, whiteSpace: "nowrap" }}>
-                                  </td>
-                                </>
-                              )}
-                            </tr>
-                            {isSettling && (
-                              <tr>
-                                <td colSpan={7} style={{ padding: 0, borderBottom: `1px solid ${DASH.line}` }}>
-                                  <div style={{ background: DASH.brassSoft, padding: 14, display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                      <label style={{ fontSize: 11, color: "#6B5A3E", fontWeight: 700 }}>현장명</label>
-                                      <input
-                                        value={settleForm.siteName}
-                                        onChange={(e) => setSettleForm({ ...settleForm, siteName: e.target.value })}
-                                        placeholder="예: 청담동 빌라 리모델링"
-                                        style={{ ...vendorInputStyle, width: 220, background: DASH.surface }}
-                                      />
-                                    </div>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                      <label style={{ fontSize: 11, color: "#6B5A3E", fontWeight: 700 }}>금액 (원)</label>
-                                      <input
-                                        value={settleForm.amount}
-                                        onChange={(e) => setSettleForm({ ...settleForm, amount: e.target.value })}
-                                        placeholder="예: 850000"
-                                        inputMode="numeric"
-                                        style={{ ...vendorInputStyle, width: 150, background: DASH.surface }}
-                                      />
-                                    </div>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                      <label style={{ fontSize: 11, color: "#6B5A3E", fontWeight: 700 }}>계좌 (자동)</label>
-                                      <div style={{ fontSize: 12.5, padding: "7px 9px", borderRadius: 6, background: DASH.surface, color: DASH.inkSoft, minWidth: 140 }}>{c.account || "미등록"}</div>
-                                    </div>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                      <label style={{ fontSize: 11, color: "#6B5A3E", fontWeight: 700 }}>예금주 (자동)</label>
-                                      <div style={{ fontSize: 12.5, padding: "7px 9px", borderRadius: 6, background: DASH.surface, color: DASH.inkSoft, minWidth: 110 }}>{c.manager || c.company || "미등록"}</div>
-                                    </div>
-                                    <button onClick={() => copySettle(c)} style={{ fontSize: 12.5, fontWeight: 700, padding: "9px 16px", borderRadius: 8, border: "none", background: DASH.navy, color: "#fff", whiteSpace: "nowrap" }}>
-                                      📋 결제 양식 복사
-                                    </button>
-                                    <button onClick={closeSettle} style={{ fontSize: 12.5, fontWeight: 600, padding: "9px 14px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.surface, color: DASH.inkSoft }}>
-                                      닫기
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-          </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
         )}
       </div>
-
-      {toast && (
-        <div style={{ position: "fixed", bottom: 26, left: "50%", transform: "translateX(-50%)", background: DASH.navy, color: "#fff", padding: "11px 20px", borderRadius: 100, fontSize: 13, boxShadow: "0 10px 30px -8px rgba(0,0,0,0.4)", zIndex: 999, whiteSpace: "nowrap" }}>
-          {toast}
-        </div>
-      )}
     </div>
   );
 }
