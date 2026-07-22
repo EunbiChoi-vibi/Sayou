@@ -691,37 +691,6 @@ function PaymentsSync() {
   return null;
 }
 
-function AsSync() {
-  // 화면에는 아무것도 안 보이는 백그라운드 동기화 — "AS" 데이터베이스를 읽어와서
-  // 대시보드의 "AS 진행 현황"이 AS 탭을 방문하지 않아도 최신 내용을 보여줄 수 있게 캐시해둡니다.
-  const pipelineLookup = usePipelineLookup();
-  const notionSync = useNotionAutoSync("interior-dashboard-notion-db-as-v1", NOTION_DB_AS, async (workerUrl, databaseId) => {
-    const result = await notionQueryDatabase(workerUrl, databaseId, { page_size: 100 });
-    const byProject = {};
-    (result.results || []).forEach((page) => {
-      const props = page.properties;
-      const relatedIds = (props["프로젝트명"]?.relation || []).map((r) => r.id);
-      const pName = relatedIds.map((id) => pipelineLookup.nameByPageId.get(id)).find(Boolean) || "(프로젝트 미연결)";
-      const range = notionDateValue(props["AS일정"]);
-      if (!range || !range.start) return;
-      (byProject[pName] = byProject[pName] || []).push({
-        id: page.id,
-        notionPageId: page.id,
-        title: notionPlainText(props["AS사항"]) || "(제목 없음)",
-        type: notionPlainText(props["공정"]),
-        date: range.start.slice(0, 10),
-        endDate: (range.end || range.start).slice(0, 10),
-        note: notionPlainText(props["특이사항"]),
-      });
-    });
-    const store = {};
-    Object.keys(byProject).forEach((pName) => { store[pName] = { entries: byProject[pName] }; });
-    await window.storage.set(AS_STORAGE_KEY, JSON.stringify(store), true);
-    return { pulled: Object.keys(byProject).length };
-  }, pipelineLookup.ready);
-  return null;
-}
-
 const GOOGLE_CLIENT_ID_STORAGE_KEY = "interior-dashboard-google-client-id-v1";
 const DEFAULT_GOOGLE_CLIENT_ID = "352350633814-epc24i0pq0fsv64tuenrkjvm8e69lven.apps.googleusercontent.com";
 const GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
@@ -2075,33 +2044,46 @@ function IssuesAndAS() {
   const [asEntries, setAsEntries] = useState([]);
   const [asLoading, setAsLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const res = await window.storage.get(AS_STORAGE_KEY, true);
-        const parsed = res && res.value ? JSON.parse(res.value) : {};
-        const all = [];
-        Object.keys(parsed).forEach((projectName) => {
-          (parsed[projectName]?.entries || []).forEach((e) => all.push({ ...e, projectName }));
-        });
-        all.sort((a, b) => (a.date < b.date ? -1 : 1));
-        if (!cancelled) setAsEntries(all.slice(0, 6));
-      } catch (e) {
-        // no AS data yet
-      } finally {
-        if (!cancelled) setAsLoading(false);
-      }
-    }
-    // AsSync가 백그라운드에서 계속 새로 써주는 캐시이므로, 한 번만 읽지 않고 주기적으로 다시 읽어와 최신 상태를 반영합니다
-    load();
-    const t = setInterval(load, 15000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, []);
-
-  // 이슈 추가·수정·삭제는 대시보드에서 제공하지 않아요 — 노션이 원본 데이터이므로, 모든 변경은 노션에서 직접 해주세요.
+  // 이슈·AS 추가·수정·삭제는 대시보드에서 제공하지 않아요 — 노션이 원본 데이터이므로, 모든 변경은 노션에서 직접 해주세요.
 
   const pipelineLookup = usePipelineLookup();
+
+  // "AS 진행 현황"도 노션과 직접 동기화해서(예전엔 AsSync가 캐시해둔 값을 한 번만 읽어와서,
+  // 나중에 캐시가 새로 갱신돼도 화면엔 반영이 안 되던 문제가 있었어요) 연동 상태 배지도 같이 보여줍니다.
+  // 다른 화면(AS 탭, useStageDates)도 쓸 수 있게 캐시(AS_STORAGE_KEY)에도 계속 저장해둡니다.
+  const asNotionSync = useNotionAutoSync("interior-dashboard-notion-db-as-v1", NOTION_DB_AS, async (workerUrl, databaseId) => {
+    const result = await notionQueryDatabase(workerUrl, databaseId, { page_size: 100 });
+    const byProject = {};
+    const all = [];
+    (result.results || []).forEach((page) => {
+      const props = page.properties;
+      const relatedIds = (props["프로젝트명"]?.relation || []).map((r) => r.id);
+      const pName = relatedIds.map((id) => pipelineLookup.nameByPageId.get(id)).find(Boolean) || "(프로젝트 미연결)";
+      const range = notionDateValue(props["AS일정"]);
+      if (!range || !range.start) return;
+      const status = notionPlainText(props["AS상태"]) || "미완료";
+      const entry = {
+        id: page.id,
+        notionPageId: page.id,
+        projectName: pName,
+        title: notionPlainText(props["AS사항"]) || "(제목 없음)",
+        type: notionPlainText(props["공정"]),
+        date: range.start.slice(0, 10),
+        endDate: (range.end || range.start).slice(0, 10),
+        note: notionPlainText(props["특이사항"]),
+        status,
+      };
+      (byProject[pName] = byProject[pName] || []).push(entry);
+      if (status !== "완료") all.push(entry); // 대시보드에서는 완료된 AS는 숨김
+    });
+    const store = {};
+    Object.keys(byProject).forEach((pName) => { store[pName] = { entries: byProject[pName] }; });
+    await window.storage.set(AS_STORAGE_KEY, JSON.stringify(store), true);
+    all.sort((a, b) => (a.date < b.date ? -1 : 1));
+    setAsEntries(all.slice(0, 6));
+    setAsLoading(false);
+    return { pulled: all.length };
+  }, pipelineLookup.ready);
 
   const notionSync = useNotionAutoSync("interior-dashboard-notion-db-issues-v1", NOTION_DB_ISSUES, async (workerUrl, databaseId) => {
     // 이 화면은 읽기 전용이라 노션으로 아무것도 보내지 않아요(push 없음) — 오직 노션 → 대시보드로만 가져옵니다.
@@ -2153,8 +2135,10 @@ function IssuesAndAS() {
     return { pushed: 0, pulled, updated };
   }, issuesLoaded);
 
-  const sortedIssues = [...issues].sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+  // 완료된 이슈/AS는 대시보드에서 숨깁니다(노션 쪽에서도 완료된 이슈는 뷰 필터로 숨겨둠)
+  const sortedIssues = [...issues].filter((x) => x.status !== "완료").sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
   const issueStatusMap = { "완료": "schedule", "처리중": "processing", "접수": "received" };
+  const asStatusMap = { "완료": "schedule", "미완료": "processing" };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 34 }}>
@@ -2178,6 +2162,7 @@ function IssuesAndAS() {
       </section>
       <section>
         <SectionHead title="AS 진행 현황" note="프로젝트별 AS 일정에서 자동으로 모아 보여줘요" />
+        <div style={{ marginBottom: 8 }}><NotionStatusBadge sync={asNotionSync} /></div>
         <Card>
           {asLoading ? (
             <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>불러오는 중…</div>
@@ -2188,6 +2173,7 @@ function IssuesAndAS() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                 {item.type && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: DASH.brassSoft, color: "#6B5A3E" }}>{item.type}</span>}
                 <span style={{ fontSize: 13.5, fontWeight: 700 }}>{item.projectName} — {item.title}</span>
+                {item.status && <StatusChip status={asStatusMap[item.status] || "processing"}>{item.status}</StatusChip>}
               </div>
               <div style={{ fontSize: 12, color: DASH.inkSoft, lineHeight: 1.5 }}>{fmtYMDLabel(item.date)}{item.endDate !== item.date ? ` ~ ${fmtYMDLabel(item.endDate)}` : ""}{item.note ? ` · ${item.note}` : ""}</div>
             </div>
@@ -2564,7 +2550,6 @@ function Dashboard({ onNavigate, me, onLogout }) {
           </div>
 
           <PaymentsSync />
-          <AsSync />
           <TodaySchedule />
           <StatCards onNavigate={onNavigate} />
           <Pipeline />
