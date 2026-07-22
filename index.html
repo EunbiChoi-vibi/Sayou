@@ -5081,6 +5081,8 @@ function ProposalPage({ onBack }) {
   const [notionError, setNotionError] = useState("");
   const [dbId, setDbId] = useState(NOTION_DB_PROPOSAL);
   const [workerUrl, setWorkerUrl] = useState(DEFAULT_WORKER_URL);
+  // 이 화면은 노션 "제안서" DB를 읽기 전용으로 조회만 합니다 — 대시보드에서 노션으로 아무것도 쓰지 않습니다(단방향 동기화)
+  const [syncStatus, setSyncStatus] = useState({ type: "idle", text: "" });
 
   const pipelineLookup = usePipelineLookup();
   const globalProjectNames = useGlobalProjectNames();
@@ -5109,77 +5111,96 @@ function ProposalPage({ onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.join("|")]);
 
-  // 프로젝트 선택 시 노션에서 제안서 조회
-  useEffect(() => {
-    // 프로젝트 연결 정보(pipelineLookup)를 아직 한 번도 못 불러왔으면, "제안서가 없다"고 성급하게
-    // 보여주지 않고 연결 정보가 준비될 때까지 기다립니다 (연결 조회가 준비되면 이 effect가 다시 실행됩니다)
+  // 프로젝트 선택 시 노션에서 제안서 조회 (읽기 전용 — notionQueryDatabase만 호출하고 쓰기 API는 절대 호출하지 않습니다)
+  async function fetchProposals() {
     if (!projectName || !dbId || !workerUrl || !pipelineLookup.ready) return;
+    setLoading(true);
+    setNotionError("");
 
-    (async () => {
-      setLoading(true);
-      setNotionError("");
-      setProposals([]);
-
-      try {
-        const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
-        if (!linkedPageId) {
-          setProposals([]);
-          setLoading(false);
-          setNotionError(`'${projectName}' 프로젝트가 노션 "프로젝트 목록"과 연결되지 않았습니다. 노션에서 프로젝트명이 정확히 일치하는지 확인해주세요.`);
-          return;
-        }
-
-        const result = await notionQueryDatabase(workerUrl, dbId, {
-          filter: {
-            property: "프로젝트명 1",
-            relation: { contains: linkedPageId }
-          },
-          page_size: 100
-        });
-
-        const items = (result.results || []).map((page) => {
-          const props = page.properties;
-          const range = notionDateValue(props["날짜"]);
-          const files = (props["PDF"]?.files || [])
-            .map((f) => ({ name: f.name || "PDF 파일", url: (f.file && f.file.url) || (f.external && f.external.url) || "" }))
-            .filter((f) => f.url);
-          return {
-            id: page.id,
-            title: notionPlainText(props["이름"]) || "(제목 없음)",
-            date: range ? range.start.slice(0, 10) : "",
-            content: notionPlainText(props["내용"]) || "",
-            files,
-            notionPageId: page.id
-          };
-        });
-
-        setProposals(items.sort((a, b) => (a.date < b.date ? 1 : -1)));
-      } catch (err) {
-        setNotionError(`조회 오류: ${err.message || "알 수 없는 오류"}`);
-      } finally {
+    try {
+      const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
+      if (!linkedPageId) {
+        setProposals([]);
         setLoading(false);
+        setNotionError(`'${projectName}' 프로젝트가 노션 "프로젝트 목록"과 연결되지 않았습니다. 노션에서 프로젝트명이 정확히 일치하는지 확인해주세요.`);
+        setSyncStatus({ type: "err", text: "Notion 오류: 프로젝트 연결 안 됨" });
+        return;
       }
-    })();
+
+      const result = await notionQueryDatabase(workerUrl, dbId, {
+        filter: {
+          property: "프로젝트명 1",
+          relation: { contains: linkedPageId }
+        },
+        page_size: 100
+      });
+
+      const items = (result.results || []).map((page) => {
+        const props = page.properties;
+        const range = notionDateValue(props["날짜"]);
+        const files = (props["PDF"]?.files || [])
+          .map((f) => ({ name: f.name || "PDF 파일", url: (f.file && f.file.url) || (f.external && f.external.url) || "" }))
+          .filter((f) => f.url);
+        return {
+          id: page.id,
+          title: notionPlainText(props["이름"]) || "(제목 없음)",
+          date: range ? range.start.slice(0, 10) : "",
+          content: notionPlainText(props["내용"]) || "",
+          files,
+          notionPageId: page.id
+        };
+      });
+
+      setProposals(items.sort((a, b) => (a.date < b.date ? 1 : -1)));
+      setSyncStatus({ type: "ok", text: `Notion 동기화됨 · ${new Date().toLocaleTimeString("ko-KR")}` });
+    } catch (err) {
+      setNotionError(`조회 오류: ${err.message || "알 수 없는 오류"}`);
+      setSyncStatus({ type: "err", text: `Notion 오류: ${(err && err.message) || "동기화 실패"}` });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    setProposals([]);
+    fetchProposals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectName, dbId, workerUrl, pipelineLookup.pageIdByName]);
+
+  // 이 탭을 계속 보고 있는 동안에도 노션 쪽 변경사항이 저절로 반영되도록 주기적으로 다시 조회합니다(읽기 전용)
+  useEffect(() => {
+    const t = setInterval(fetchProposals, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectName, dbId, workerUrl, pipelineLookup.pageIdByName, pipelineLookup.ready]);
+
+  const proposalSync = {
+    status: syncStatus,
+    configured: !!(workerUrl && dbId),
+    retryNow: fetchProposals,
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px 60px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <StageHeader onBack={onBack} eyebrow="Proposal" title="제안서" desc="Notion 데이터베이스와 실시간 동기화되는 제안서를 보세요." />
+          <StageHeader onBack={onBack} eyebrow="Proposal" title="제안서" desc="프로젝트를 선택하면 노션 제안서를 확인할 수 있어요." />
         </div>
 
         <Card style={{ padding: 16, marginBottom: 14 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>프로젝트(현장) 선택</label>
-            <select
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              style={{ fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink }}
-            >
-              {options.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 11, color: DASH.inkSoft, fontWeight: 600 }}>프로젝트(현장) 선택</label>
+              <select
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                style={{ fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.ink }}
+              >
+                {options.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <NotionStatusBadge sync={proposalSync} />
           </div>
         </Card>
 
