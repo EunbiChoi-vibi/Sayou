@@ -306,9 +306,10 @@ function Card({ children, style, onClick }) {
 const TODAY_SCHEDULE_SOURCES = [
   { db: "033d7aff18d74536a2640b9f5190c672", dateProp: "기간", labelProp: "작업내용", relationProp: null, kind: "공정" },
   { db: NOTION_DB_CONSULT, dateProp: "상담일", labelProp: "상담내용", relationProp: "프로젝트명 1", kind: "상담" },
-  { db: NOTION_DB_MEASURE, dateProp: "실측일", labelProp: "내용", relationProp: "프로젝트 목록", kind: "실측" },
+  // 실측 일정은 별도 "실측 보고서" DB가 아니라 "프로젝트 목록"에 있는 실측일정 컬럼에서 직접 가져옵니다
+  { db: "7523128efdd84be1936343c9e28d9fad", dateProp: "실측일정", relationProp: null, kind: "실측", fixedLabel: "실측 방문 예정" },
   { db: NOTION_DB_CONTRACT, dateProp: "계약일", labelProp: "내용", relationProp: "프로젝트명 1", kind: "계약" },
-  { db: NOTION_DB_AS, dateProp: "일정", labelProp: "메모", relationProp: "프로젝트명", kind: "AS" },
+  { db: NOTION_DB_AS, dateProp: "AS일정", labelProp: "특이사항", titleProp: "AS사항", relationProp: "프로젝트명", kind: "AS" },
 ];
 
 function TodaySchedule() {
@@ -349,7 +350,7 @@ function TodaySchedule() {
           } else {
             project = notionPlainText(props["프로젝트명"]);
           }
-          const label = notionPlainText(props[s.labelProp]) || notionPlainText(props["이름"]) || "(제목 없음)";
+          const label = s.fixedLabel || notionPlainText(props[s.labelProp]) || notionPlainText(props[s.titleProp || "이름"]) || "(제목 없음)";
           todays.push({ id: `${s.kind}-${page.id}`, kind: s.kind, project, label });
         });
       });
@@ -431,7 +432,7 @@ function StatCards({ onNavigate }) {
   const c = counts || { activeSites: 0, totalSites: 0, unpaidCount: 0, unpaidTotal: 0, newInquiries: 0, totalInquiries: 0 };
 
   const stats = [
-    { label: "진행 현장", value: String(c.activeSites), unit: "건", meta: `진행 중 ${c.activeSites} · 종료 ${c.totalSites - c.activeSites}`, bar: DASH.navy },
+    { label: "진행 프로젝트", value: String(c.activeSites), unit: "건", meta: `진행 중 ${c.activeSites} · 종료 ${c.totalSites - c.activeSites}`, bar: DASH.navy },
     { label: "상담문의", value: String(c.newInquiries), unit: "건", meta: `신규 ${c.newInquiries} · 전체 ${c.totalInquiries}`, bar: DASH.amber, nav: "inquiry" },
     { label: "결제 확인 필요", value: String(c.unpaidCount), unit: "건", meta: `미결제 합계 ${c.unpaidTotal.toLocaleString("ko-KR")}원`, bar: DASH.teal, nav: "payments" },
   ];
@@ -674,6 +675,37 @@ function PaymentsSync() {
     });
     await window.storage.set(PAYMENTS_STORAGE_KEY, JSON.stringify({ payments: items }), true);
     return { pulled: items.length };
+  }, true);
+  return null;
+}
+
+function AsSync() {
+  // 화면에는 아무것도 안 보이는 백그라운드 동기화 — "AS" 데이터베이스를 읽어와서
+  // 대시보드의 "AS 진행 현황"이 AS 탭을 방문하지 않아도 최신 내용을 보여줄 수 있게 캐시해둡니다.
+  const pipelineLookup = usePipelineLookup();
+  const notionSync = useNotionAutoSync("interior-dashboard-notion-db-as-v1", NOTION_DB_AS, async (workerUrl, databaseId) => {
+    const result = await notionQueryDatabase(workerUrl, databaseId, { page_size: 100 });
+    const byProject = {};
+    (result.results || []).forEach((page) => {
+      const props = page.properties;
+      const relatedIds = (props["프로젝트명"]?.relation || []).map((r) => r.id);
+      const pName = relatedIds.map((id) => pipelineLookup.nameByPageId.get(id)).find(Boolean) || "(프로젝트 미연결)";
+      const range = notionDateValue(props["AS일정"]);
+      if (!range || !range.start) return;
+      (byProject[pName] = byProject[pName] || []).push({
+        id: page.id,
+        notionPageId: page.id,
+        title: notionPlainText(props["AS사항"]) || "(제목 없음)",
+        type: notionPlainText(props["공정"]),
+        date: range.start.slice(0, 10),
+        endDate: (range.end || range.start).slice(0, 10),
+        note: notionPlainText(props["특이사항"]),
+      });
+    });
+    const store = {};
+    Object.keys(byProject).forEach((pName) => { store[pName] = { entries: byProject[pName] }; });
+    await window.storage.set(AS_STORAGE_KEY, JSON.stringify(store), true);
+    return { pulled: Object.keys(byProject).length };
   }, true);
   return null;
 }
@@ -2123,7 +2155,8 @@ function IssuesAndAS() {
             <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>등록된 AS 일정이 없습니다.</div>
           ) : asEntries.map((item, i) => (
             <div key={item.id} style={{ padding: "14px 16px", borderBottom: i === asEntries.length - 1 ? "none" : `1px solid ${DASH.line}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                {item.type && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: DASH.brassSoft, color: "#6B5A3E" }}>{item.type}</span>}
                 <span style={{ fontSize: 13.5, fontWeight: 700 }}>{item.projectName} — {item.title}</span>
               </div>
               <div style={{ fontSize: 12, color: DASH.inkSoft, lineHeight: 1.5 }}>{fmtYMDLabel(item.date)}{item.endDate !== item.date ? ` ~ ${fmtYMDLabel(item.endDate)}` : ""}{item.note ? ` · ${item.note}` : ""}</div>
@@ -2250,17 +2283,38 @@ function usePipelineLookup() {
   const [sites, setSites] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    async function loadCache() {
       try {
         const r = await window.storage.get(PIPELINE_STORAGE_KEY, true);
         const parsed = r && r.value ? JSON.parse(r.value) : [];
-        if (!cancelled && Array.isArray(parsed)) setSites(parsed);
+        if (!cancelled && Array.isArray(parsed) && parsed.length) setSites(parsed);
       } catch (e) {
         // 아직 프로젝트 목록을 한 번도 안 불러와졌으면 빈 목록
       }
     }
-    load();
-    const t = setInterval(load, 15000);
+    // 대시보드(Pipeline 컴포넌트)를 거치지 않고 바로 이 화면으로 새로고침되는 경우에도
+    // 프로젝트 연결이 항상 최신 상태이도록, 캐시와 별개로 노션에서 직접 한 번 더 가져옵니다
+    async function loadLive() {
+      try {
+        const r = await window.storage.get(NOTION_WORKER_URL_KEY, true);
+        const workerUrl = (r && r.value) || DEFAULT_WORKER_URL;
+        if (!workerUrl) return;
+        const result = await notionQueryDatabase(workerUrl, "7523128efdd84be1936343c9e28d9fad", { page_size: 100 });
+        const fresh = [];
+        (result.results || []).forEach((page) => {
+          const props = page.properties;
+          const name = notionPlainText(props["프로젝트명"]) || notionPlainText(props["비고(수정금지)"]);
+          if (!name) return;
+          fresh.push({ id: page.id, name, notionPageId: page.id });
+        });
+        if (!cancelled && fresh.length) setSites(fresh);
+      } catch (e) {
+        // 실패하면 캐시된 값을 그대로 씁니다
+      }
+    }
+    loadCache();
+    loadLive();
+    const t = setInterval(loadLive, 15000);
     return () => { cancelled = true; clearInterval(t); };
   }, []);
   const pageIdByName = useMemo(() => new Map(sites.filter((s) => s.notionPageId).map((s) => [s.name, s.notionPageId])), [sites]);
@@ -2438,6 +2492,7 @@ function Dashboard({ onNavigate, me, onLogout }) {
           </div>
 
           <PaymentsSync />
+          <AsSync />
           <TodaySchedule />
           <StatCards onNavigate={onNavigate} />
           <Pipeline />
@@ -5652,10 +5707,13 @@ function ConstructionPage({ onBack }) {
 
 function defaultAsProject() { return { entries: [] }; }
 
+const VENDOR_DB_ID = "28afc9d8c57b4b5c86d24f22e363781b";
+
 function AsPage({ onBack }) {
   const [store, setStore, loaded, saveStatus] = useProjectStore(AS_STORAGE_KEY, {});
   const [projectName, setProjectName] = useState(ALL_PROJECT_NAMES[0] || "");
-  const [draft, setDraft] = useState({ title: "", date: STAGE_TODAY, endDate: STAGE_TODAY, note: "" });
+  const [draft, setDraft] = useState({ title: "", type: "", date: STAGE_TODAY, endDate: STAGE_TODAY, note: "" });
+  const [processOptions, setProcessOptions] = useState([]);
   const googleSyncRef = useRef(null);
 
   useEffect(() => {
@@ -5665,14 +5723,34 @@ function AsPage({ onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectName, loaded]);
 
+  // "공정" 선택지는 "거래처" 데이터베이스의 공정 옵션을 그대로 가져와 씁니다 —
+  // 거래처에서 공정을 추가·수정하면 여기서도 그 값을 선택할 수 있어요.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await window.storage.get(NOTION_WORKER_URL_KEY, true);
+        const workerUrl = (r && r.value) || DEFAULT_WORKER_URL;
+        if (!workerUrl) return;
+        const db = await notionFetch(workerUrl, `/v1/databases/${VENDOR_DB_ID}`, { method: "GET" });
+        const prop = db.properties && db.properties["공정"];
+        const options = prop && prop.type === "select" ? (prop.select.options || []).map((o) => o.name) : [];
+        if (!cancelled && options.length) setProcessOptions(options);
+      } catch (e) {
+        // 실패해도 조용히 넘어갑니다 — 직접 입력은 계속 가능해요
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const current = store[projectName] || defaultAsProject();
   function update(updater) { setStore((prev) => ({ ...prev, [projectName]: updater(prev[projectName] || defaultAsProject()) })); }
 
   function addEntry() {
     if (!draft.title.trim()) return;
     const endDate = draft.endDate && draft.endDate >= draft.date ? draft.endDate : draft.date;
-    update((proj) => ({ entries: [...proj.entries, { id: makeStageId(), title: draft.title.trim(), date: draft.date, endDate, note: draft.note.trim() }] }));
-    setDraft({ title: "", date: STAGE_TODAY, endDate: STAGE_TODAY, note: "" });
+    update((proj) => ({ entries: [...proj.entries, { id: makeStageId(), title: draft.title.trim(), type: draft.type, date: draft.date, endDate, note: draft.note.trim() }] }));
+    setDraft({ title: "", type: "", date: STAGE_TODAY, endDate: STAGE_TODAY, note: "" });
   }
   function removeEntry(id) {
     const target = current.entries.find((e) => e.id === id);
@@ -5708,11 +5786,13 @@ function AsPage({ onBack }) {
     const justPushedIds = [];
     for (const e of current.entries) {
       if (!e.notionPageId && !linkedPageId) { blocked++; continue; }
+      if (e.type) await notionEnsureSelectOption(workerUrl, databaseId, "공정", e.type);
       const props = {
-        "이름": notionTitleProp(`${projectName} - ${e.title}`),
+        "AS사항": notionTitleProp(`${projectName} - ${e.title}`),
         "프로젝트명": notionRelationProp(linkedPageId),
-        "일정": notionDateRangeProp(e.date, e.endDate),
-        "메모": notionTextProp(e.note),
+        "AS일정": notionDateRangeProp(e.date, e.endDate),
+        "특이사항": notionTextProp(e.note),
+        "공정": notionSelectProp(e.type),
       };
       if (e.notionPageId) {
         await notionUpdatePageSafe(workerUrl, e.notionPageId, props);
@@ -5731,9 +5811,17 @@ function AsPage({ onBack }) {
       (result.results || []).forEach((page) => {
         if (known.has(page.id)) return;
         const props = page.properties;
-        const range = notionDateValue(props["일정"]);
+        const range = notionDateValue(props["AS일정"]);
         if (!range || !range.start) return;
-        newEntries.push({ id: makeStageId(), title: notionPlainText(props["이름"]) || "(제목 없음)", date: range.start.slice(0, 10), endDate: (range.end || range.start).slice(0, 10), note: notionPlainText(props["메모"]), notionPageId: page.id });
+        newEntries.push({
+          id: makeStageId(),
+          title: notionPlainText(props["AS사항"]) || "(제목 없음)",
+          type: notionPlainText(props["공정"]),
+          date: range.start.slice(0, 10),
+          endDate: (range.end || range.start).slice(0, 10),
+          note: notionPlainText(props["특이사항"]),
+          notionPageId: page.id,
+        });
         pulled++;
       });
     }
@@ -5745,7 +5833,7 @@ function AsPage({ onBack }) {
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Pretendard:wght@400;500;600;700&display=swap');`}</style>
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px 60px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
           <StageHeader onBack={onBack} eyebrow="After Service" title="AS" desc="프로젝트별 진행 중인 AS 일정을 등록하세요. 일정을 추가하고 아래에서 동기화하면 구글 캘린더에도 반영됩니다." />
           <SaveStatusText status={saveStatus} />
         </div>
@@ -5758,12 +5846,16 @@ function AsPage({ onBack }) {
 
         <Card style={{ padding: 16, marginBottom: 14 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: DASH.navy, marginBottom: 10 }}>AS 일정 추가</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
             <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="AS 내용 (예: 조명 스위치 교체)" style={stageInputStyle} />
+            <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} style={stageInputStyle}>
+              <option value="">공정 선택</option>
+              {processOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
             <input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} style={stageInputStyle} />
             <input type="date" value={draft.endDate} onChange={(e) => setDraft({ ...draft, endDate: e.target.value })} min={draft.date} style={stageInputStyle} />
           </div>
-          <input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder="메모" style={{ ...stageInputStyle, width: "100%" }} />
+          <input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder="특이사항" style={{ ...stageInputStyle, width: "100%" }} />
           <button onClick={addEntry} style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, padding: "8px 16px", borderRadius: 8, border: "none", background: DASH.brass, color: DASH.navy }}>+ AS 일정 추가</button>
         </Card>
 
@@ -5774,7 +5866,7 @@ function AsPage({ onBack }) {
             <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", borderBottom: i === arr.length - 1 ? "none" : `1px solid ${DASH.line}` }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: DASH.brass, minWidth: 130 }}>{fmtYMDLabel(e.date)}{e.endDate !== e.date ? ` ~ ${fmtYMDLabel(e.endDate)}` : ""}</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: DASH.ink }}>{e.title}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: DASH.ink }}>{e.type && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: DASH.brassSoft, color: "#6B5A3E", marginRight: 6 }}>{e.type}</span>}{e.title}</div>
                 {e.note && <div style={{ fontSize: 11.5, color: DASH.inkSoft }}>{e.note}</div>}
               </div>
               {e.googleEventId && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: DASH.tealSoft, color: DASH.teal }}>캘린더 반영됨</span>}
