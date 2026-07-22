@@ -4465,43 +4465,22 @@ function PaymentsPage({ onBack }) {
   const [copiedId, setCopiedId] = useState(null);
   const pipelineLookup = usePipelineLookup();
 
+  // 이 화면은 노션 "결제 확인 필요 목록"을 읽기 전용으로 미러링합니다 — 새 결제 항목은 노션에서 직접 추가해주세요.
+  // (완료 체크·삭제만 각각 그 즉시 단일 필드로 노션에 반영되고, 그 외에는 60초마다 노션 → 대시보드로만 가져옵니다.
+  // 예전엔 여기서 로컬 상태 전체를 노션에 되돌려 써서, 프로젝트 연결이 잠깐 안 잡히면 노션의 "프로젝트명"이
+  // 빈 값으로 덮어써지는 등 노션에 입력해둔 정보가 사라지는 문제가 있었습니다.)
   const notionSync = useNotionAutoSync("interior-dashboard-notion-db-payments-v1", NOTION_DB_PAYMENTS, async (workerUrl, databaseId) => {
-    let pushed = 0, pulled = 0, updated = 0, blocked = 0;
-    const justPushedIds = [];
-    for (const p of payments) {
-      const linkedPageId = pipelineLookup.pageIdByName.get(p.projectName);
-      if (!p.notionPageId && !linkedPageId) { blocked++; continue; }
-      const props = {
-        "결제품목": notionTitleProp(p.content),
-        "프로젝트명": notionRelationProp(linkedPageId),
-        "계좌번호 / 은행": notionTextProp(p.account),
-        "예금주": notionTextProp(p.holder),
-        "결제기한": notionDateRangeProp(p.dueDate, p.dueDate),
-        "결제금액": notionNumberProp(p.amount),
-        "완료": { checkbox: !!p.done },
-      };
-      if (p.notionPageId) {
-        await notionUpdatePageSafe(workerUrl, p.notionPageId, props);
-        updated++;
-      } else {
-        const page = await notionCreatePage(workerUrl, databaseId, props);
-        setStore((prev) => ({ payments: prev.payments.map((x) => (x.id === p.id ? { ...x, notionPageId: page.id } : x)) }));
-        justPushedIds.push(page.id);
-        pushed++;
-      }
-    }
-    const known = new Set([...payments.map((p) => p.notionPageId).filter(Boolean), ...justPushedIds]);
+    let pulled = 0;
     const result = await notionQueryDatabase(workerUrl, databaseId, { page_size: 100 });
-    const newPayments = [];
+    const items = [];
     (result.results || []).forEach((page) => {
-      if (known.has(page.id)) return;
       const props = page.properties;
       const relatedIds = (props["프로젝트명"]?.relation || []).map((r) => r.id);
-      const pName = relatedIds.map((id) => pipelineLookup.nameByPageId.get(id)).find(Boolean);
-      if (!pName) return; // 연결된 프로젝트를 로컬에서 아직 모르면 건너뜁니다
+      const pName = relatedIds.map((id) => pipelineLookup.nameByPageId.get(id)).find(Boolean) || "(프로젝트 미연결)";
       const range = notionDateValue(props["결제기한"]);
-      newPayments.push({
-        id: makeStageId(),
+      items.push({
+        id: page.id,
+        notionPageId: page.id,
         projectName: pName,
         content: notionPlainText(props["결제품목"]) || "(내용 없음)",
         account: notionPlainText(props["계좌번호 / 은행"]),
@@ -4509,12 +4488,11 @@ function PaymentsPage({ onBack }) {
         dueDate: range ? range.start.slice(0, 10) : STAGE_TODAY,
         amount: Number(notionPlainText(props["결제금액"])) || 0,
         done: props["완료"]?.checkbox || false,
-        notionPageId: page.id,
       });
       pulled++;
     });
-    if (newPayments.length) setStore((prev) => ({ payments: dedupeByKey([...prev.payments, ...newPayments], (p) => p.notionPageId) }));
-    return { pushed, pulled, updated, blocked };
+    setStore({ payments: items });
+    return { pulled };
   }, loaded);
 
   function toggleDone(id) {
