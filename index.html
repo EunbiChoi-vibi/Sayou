@@ -5582,6 +5582,75 @@ function AsPage({ onBack }) {
    노션 "공정표" DB를 읽기 전용으로 미러링합니다 (대시보드의 "사유공간 종합 공정표"와 저장소를 공유)
    ============================================================================ */
 
+// 프로젝트별 공정표 캘린더 옆에 그 프로젝트의 입금 상태만 간단히 보여주는 보조 패널입니다.
+// 노션 "입금 현황"을 읽기 전용으로 조회만 하고(단방향), 금액·입금예정일 등은 표시하지 않고
+// 상태(미입금/입금완료) 배지만 보여줍니다. 수정은 "입금 현황" 화면에서만 할 수 있어요.
+function DepositStatusMini({ projectName }) {
+  const [entries, setEntries] = useState([]);
+  const [workerUrl, setWorkerUrl] = useState(DEFAULT_WORKER_URL);
+  const [dbId, setDbId] = useState(NOTION_DB_DEPOSITS);
+  const pipelineLookup = usePipelineLookup();
+  const linkedPageId = pipelineLookup.pageIdByName.get(projectName);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r1 = await window.storage.get("interior-dashboard-notion-worker-url-v1", true);
+        if (r1 && r1.value) setWorkerUrl(r1.value);
+      } catch (e) {}
+      try {
+        const r2 = await window.storage.get("interior-dashboard-notion-db-deposits-v1", true);
+        if (r2 && r2.value) setDbId(r2.value);
+      } catch (e) {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!workerUrl || !dbId || !linkedPageId) { setEntries([]); return; }
+      try {
+        const result = await notionQueryDatabase(workerUrl, dbId, { filter: { property: "프로젝트명 1", relation: { contains: linkedPageId } }, page_size: 100 });
+        if (cancelled) return;
+        setEntries((result.results || []).map((page) => {
+          const props = page.properties;
+          return {
+            type: props["구분"]?.select?.name || "",
+            status: props["상태"]?.select?.name || "미입금",
+            hidden: !!props["숨김"]?.checkbox,
+          };
+        }));
+      } catch (e) {
+        // 보조 정보라 오류를 화면에 따로 알리지 않고 조용히 넘어갑니다
+      }
+    }
+    load();
+    const t = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [workerUrl, dbId, linkedPageId]);
+
+  if (!projectName) return null;
+  const visible = DEPOSIT_TYPES.map((type) => entries.find((e) => e.type === type && !e.hidden)).filter(Boolean);
+
+  return (
+    <Card style={{ padding: 16 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: DASH.navy, marginBottom: 10 }}>입금 현황</div>
+      {visible.length === 0 ? (
+        <div style={{ fontSize: 11.5, color: DASH.inkFaint }}>등록된 입금 항목이 없습니다.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {visible.map((e) => (
+            <div key={e.type} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontSize: 12, color: DASH.inkSoft }}>{e.type}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 100, background: e.status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: e.status === "입금완료" ? DASH.teal : DASH.red }}>{e.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function ProjectSchedulePage({ onBack }) {
   const isMobile = useIsMobile();
   const [schedules, setSchedules] = useState({});
@@ -5740,7 +5809,8 @@ function ProjectSchedulePage({ onBack }) {
           </div>
         </Card>
 
-        <Card style={{ padding: 16 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+        <Card style={{ padding: 16, flex: "1 1 480px", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <button onClick={() => shiftMonth(-1)} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.navy, fontSize: 14 }}>‹</button>
@@ -5805,6 +5875,10 @@ function ProjectSchedulePage({ onBack }) {
             </div>
           )}
         </Card>
+        <div style={{ flex: "0 0 220px", minWidth: 200 }}>
+          <DepositStatusMini projectName={projectName} />
+        </div>
+        </div>
       </div>
     </div>
   );
