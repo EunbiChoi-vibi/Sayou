@@ -1634,6 +1634,7 @@ async function pushScheduleTasksToNotion(workerUrl, databaseId, projectName, tas
 }
 
 function ProjectSchedule() {
+  const isMobile = useIsMobile();
   const [schedules, setSchedules] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [pipelineSites, setPipelineSites] = useState([]);
@@ -2013,7 +2014,7 @@ function ProjectSchedule() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderTop: `1px solid ${DASH.line}`, borderLeft: `1px solid ${DASH.line}` }}>
           {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
-            <div key={d} style={{ padding: "8px 10px", fontSize: 11.5, fontWeight: 700, color: i === 0 ? DASH.red : i === 6 ? DASH.blue : DASH.inkSoft, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: DASH.paper }}>{d}</div>
+            <div key={d} style={{ padding: isMobile ? "4px 2px" : "8px 10px", fontSize: isMobile ? 9.5 : 11.5, fontWeight: 700, color: i === 0 ? DASH.red : i === 6 ? DASH.blue : DASH.inkSoft, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: DASH.paper, textAlign: isMobile ? "center" : "left" }}>{d}</div>
           ))}
           {monthDays.map((day, idx) => {
             const dStr = ymd(day);
@@ -2021,15 +2022,15 @@ function ProjectSchedule() {
             const isToday = dStr === todayStr;
             const dayTasks = tasksByDate[dStr] || [];
             return (
-              <div key={idx} style={{ minHeight: 92, padding: 6, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: inMonth ? DASH.surface : DASH.paper, opacity: inMonth ? 1 : 0.55 }}>
+              <div key={idx} style={{ minHeight: isMobile ? 52 : 92, padding: isMobile ? 3 : 6, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: inMonth ? DASH.surface : DASH.paper, opacity: inMonth ? 1 : 0.55 }}>
                 <div style={{
-                  fontSize: 11.5, fontWeight: 700, marginBottom: 5,
+                  fontSize: isMobile ? 9.5 : 11.5, fontWeight: 700, marginBottom: isMobile ? 2 : 5,
                   color: isToday ? "#fff" : (day.getDay() === 0 ? DASH.red : day.getDay() === 6 ? DASH.blue : DASH.ink),
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: isToday ? 20 : "auto", height: isToday ? 20 : "auto",
+                  width: isToday ? (isMobile ? 15 : 20) : "auto", height: isToday ? (isMobile ? 15 : 20) : "auto",
                   borderRadius: "50%", background: isToday ? DASH.brass : "transparent",
                 }}>{day.getDate()}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 1.5 : 3 }}>
                   {dayTasks.map((t) => {
                     const col = colorForProject(t.projectName);
                     const dow = day.getDay();
@@ -2038,8 +2039,8 @@ function ProjectSchedule() {
                     return (
                       <div key={t.id} title={t.label ? `${t.projectName} · ${t.type} · ${t.label}` : `${t.projectName} · ${t.type}`}
                         style={{
-                          fontSize: 10, padding: "3px 6px", margin: 0,
-                          marginLeft: roundLeft ? 0 : -6, marginRight: roundRight ? 0 : -6,
+                          fontSize: isMobile ? 7.5 : 10, padding: isMobile ? "1px 3px" : "3px 6px", margin: 0,
+                          marginLeft: roundLeft ? 0 : (isMobile ? -3 : -6), marginRight: roundRight ? 0 : (isMobile ? -3 : -6),
                           borderTopLeftRadius: roundLeft ? 5 : 0, borderBottomLeftRadius: roundLeft ? 5 : 0,
                           borderTopRightRadius: roundRight ? 5 : 0, borderBottomRightRadius: roundRight ? 5 : 0,
                           background: col.bg, color: col.fg,
@@ -6079,6 +6080,7 @@ function AsPage({ onBack }) {
    ============================================================================ */
 
 function ProjectSchedulePage({ onBack }) {
+  const isMobile = useIsMobile();
   const [schedules, setSchedules] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [pipelineSites, setPipelineSites] = useState([]);
@@ -6249,7 +6251,7 @@ function ProjectSchedulePage({ onBack }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderTop: `1px solid ${DASH.line}`, borderLeft: `1px solid ${DASH.line}` }}>
             {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
-              <div key={d} style={{ padding: "8px 10px", fontSize: 11.5, fontWeight: 700, color: i === 0 ? DASH.red : i === 6 ? DASH.blue : DASH.inkSoft, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: DASH.paper }}>{d}</div>
+              <div key={d} style={{ padding: isMobile ? "4px 2px" : "8px 10px", fontSize: isMobile ? 9.5 : 11.5, fontWeight: 700, color: i === 0 ? DASH.red : i === 6 ? DASH.blue : DASH.inkSoft, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: DASH.paper, textAlign: isMobile ? "center" : "left" }}>{d}</div>
             ))}
             {monthDays.map((day, idx) => {
               const dStr = ymd(day);
@@ -6257,15 +6259,15 @@ function ProjectSchedulePage({ onBack }) {
               const isToday = dStr === todayStr;
               const dayTasks = tasksByDate[dStr] || [];
               return (
-                <div key={idx} style={{ minHeight: 92, padding: 6, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: inMonth ? DASH.surface : DASH.paper, opacity: inMonth ? 1 : 0.55 }}>
+                <div key={idx} style={{ minHeight: isMobile ? 52 : 92, padding: isMobile ? 3 : 6, borderRight: `1px solid ${DASH.line}`, borderBottom: `1px solid ${DASH.line}`, background: inMonth ? DASH.surface : DASH.paper, opacity: inMonth ? 1 : 0.55 }}>
                   <div style={{
-                    fontSize: 11.5, fontWeight: 700, marginBottom: 5,
+                    fontSize: isMobile ? 9.5 : 11.5, fontWeight: 700, marginBottom: isMobile ? 2 : 5,
                     color: isToday ? "#fff" : (day.getDay() === 0 ? DASH.red : day.getDay() === 6 ? DASH.blue : DASH.ink),
                     display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: isToday ? 20 : "auto", height: isToday ? 20 : "auto",
+                    width: isToday ? (isMobile ? 15 : 20) : "auto", height: isToday ? (isMobile ? 15 : 20) : "auto",
                     borderRadius: "50%", background: isToday ? DASH.brass : "transparent",
                   }}>{day.getDate()}</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 1.5 : 3 }}>
                     {dayTasks.map((t) => {
                       const col = colorForProject(t.type);
                       const dow = day.getDay();
@@ -6274,8 +6276,8 @@ function ProjectSchedulePage({ onBack }) {
                       return (
                         <div key={t.id} title={`${t.type} · ${t.label}`}
                           style={{
-                            fontSize: 10, padding: "3px 6px", margin: 0,
-                            marginLeft: roundLeft ? 0 : -6, marginRight: roundRight ? 0 : -6,
+                            fontSize: isMobile ? 7.5 : 10, padding: isMobile ? "1px 3px" : "3px 6px", margin: 0,
+                            marginLeft: roundLeft ? 0 : (isMobile ? -3 : -6), marginRight: roundRight ? 0 : (isMobile ? -3 : -6),
                             borderTopLeftRadius: roundLeft ? 5 : 0, borderBottomLeftRadius: roundLeft ? 5 : 0,
                             borderTopRightRadius: roundRight ? 5 : 0, borderBottomRightRadius: roundRight ? 5 : 0,
                             background: col.bg, color: col.fg,
