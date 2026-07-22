@@ -2322,6 +2322,50 @@ function usePipelineLookup() {
   return { sites, pageIdByName, nameByPageId };
 }
 
+// "프로젝트 목록"에 있는 첫상담/실측일정/디자인미팅-1/디자인미팅-2 컬럼을 프로젝트별 일정으로 모아줍니다
+// (공정표 DB와는 별개 — 프로젝트별 공정표 캘린더에 함께 표시하기 위한 용도)
+const PIPELINE_MILESTONE_FIELDS = [
+  ["첫상담", "첫상담"],
+  ["실측일정", "실측"],
+  ["디자인미팅-1", "디자인미팅 1차"],
+  ["디자인미팅-2", "디자인미팅 2차"],
+];
+function usePipelineMilestones() {
+  const [milestonesByProject, setMilestonesByProject] = useState(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await window.storage.get(NOTION_WORKER_URL_KEY, true);
+        const workerUrl = (r && r.value) || DEFAULT_WORKER_URL;
+        if (!workerUrl) return;
+        const result = await notionQueryDatabase(workerUrl, "7523128efdd84be1936343c9e28d9fad", { page_size: 100 });
+        const map = new Map();
+        (result.results || []).forEach((page) => {
+          const props = page.properties;
+          const name = notionPlainText(props["프로젝트명"]);
+          if (!name) return;
+          const events = [];
+          PIPELINE_MILESTONE_FIELDS.forEach(([prop, label]) => {
+            const range = notionDateValue(props[prop]);
+            if (range && range.start) {
+              events.push({ kind: label, date: range.start.slice(0, 10), endDate: (range.end || range.start).slice(0, 10) });
+            }
+          });
+          if (events.length) map.set(name, events);
+        });
+        if (!cancelled) setMilestonesByProject(map);
+      } catch (e) {
+        // 실패하면 다음 주기에 다시 시도합니다
+      }
+    }
+    load();
+    const t = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+  return milestonesByProject;
+}
+
 const STAGE_DATE_STORAGE_KEYS = {
   "상담": CONSULT_STORAGE_KEY,
   "실측": MEASURE_STORAGE_KEY,
@@ -4480,6 +4524,15 @@ function StageHeader({ onBack, eyebrow, title, desc }) {
 function ProjectPicker({ projectName, setProjectName, extraNames }) {
   const globalProjectNames = useGlobalProjectNames();
   const options = Array.from(new Set([...globalProjectNames, ...ALL_PROJECT_NAMES, ...(extraNames || [])])).filter((n) => n && n !== "새 프로젝트");
+
+  // 드롭다운에 화면상 첫 번째 항목이 보여도, 실제 선택 상태(projectName)는 노션에서 프로젝트 목록을
+  // 불러오기 전엔 빈 값이라 화면과 실제 상태가 어긋날 수 있었습니다. 목록이 채워지면 맞춰줍니다.
+  useEffect(() => {
+    if (options.length === 0) return;
+    if (!projectName || !options.includes(projectName)) setProjectName(options[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.join("|")]);
+
   return (
     <Card style={{ padding: 16, marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
@@ -5990,13 +6043,23 @@ function ProjectSchedulePage({ onBack }) {
   const activeOptions = Array.from(new Set(pipelineSites.filter((s) => s.stage !== "종료").map((s) => s.name))).filter(Boolean);
   const current = schedules[projectName] || defaultProjectSchedule();
 
+  // "프로젝트 목록"의 첫상담·실측일정·디자인미팅-1·디자인미팅-2도 공정표와 같은 캘린더에 함께 표시합니다
+  const milestonesByProject = usePipelineMilestones();
+  const milestoneEvents = (milestonesByProject.get(projectName) || []).map((m) => ({
+    id: `milestone-${projectName}-${m.kind}`,
+    type: m.kind,
+    label: "",
+    date: m.date,
+    endDate: m.endDate,
+  }));
+
   function goToday() { setMonthDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); }
   function shiftMonth(delta) { setMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1)); }
 
   const monthDays = buildMonthGrid(monthDate);
   const todayStr = ymd(new Date());
   const tasksByDate = {};
-  (current.tasks || []).forEach((t) => {
+  [...(current.tasks || []), ...milestoneEvents].forEach((t) => {
     const start = parseYMD(t.date);
     const end = parseYMD(t.endDate || t.date) || start;
     if (!start) return;
@@ -6080,7 +6143,7 @@ function ProjectSchedulePage({ onBack }) {
                             position: "relative", zIndex: 1,
                           }}
                         >
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roundLeft ? `${t.type} · ${t.label}` : " "}</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roundLeft ? (t.label ? `${t.type} · ${t.label}` : t.type) : " "}</span>
                         </div>
                       );
                     })}
