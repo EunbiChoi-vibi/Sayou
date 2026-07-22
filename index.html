@@ -5994,7 +5994,7 @@ function InquiryPage({ onBack }) {
       try {
         const result = await notionQueryDatabase(workerUrl, dbId, {
           page_size: 100,
-          sorts: [{ property: "신청날짜", direction: "descending" }]
+          sorts: [{ property: "신청일", direction: "descending" }]
         });
 
         const items = (result.results || []).map((page) => {
@@ -6008,14 +6008,17 @@ function InquiryPage({ onBack }) {
             purpose: notionPlainText(props["용도"]) || "-",
             budget: props["예산"]?.number ? `${props["예산"].number.toLocaleString()}원` : "-",
             status: props["구분"]?.select?.name || "상담문의",
-            date: props["신청날짜"] ? (() => {
+            date: props["신청일"] ? (() => {
               try {
                 let dateStr = null;
-                // Notion created_time은 ISO 8601 문자열
-                if (typeof props["신청날짜"] === "string") {
-                  dateStr = props["신청날짜"];
-                } else if (props["신청날짜"] && props["신청날짜"].start) {
-                  dateStr = props["신청날짜"].start;
+                // Notion created_time 속성은 { type: "created_time", created_time: "ISO 8601 문자열" } 형태입니다
+                const prop = props["신청일"];
+                if (typeof prop === "string") {
+                  dateStr = prop;
+                } else if (prop && prop.created_time) {
+                  dateStr = prop.created_time;
+                } else if (prop && prop.start) {
+                  dateStr = prop.start;
                 }
                 
                 if (!dateStr) return "-";
