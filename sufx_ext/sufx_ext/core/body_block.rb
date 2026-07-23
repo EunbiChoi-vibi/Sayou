@@ -128,18 +128,32 @@ module Sufx
 
     # corner를 기준점으로 u(폭)/v(높이)/n(깊이, 앞->뒤) 세 축 방향의 open-front 쉘 박스를 만든다.
     # n=0(앞, corner가 놓인 면)에는 패널을 만들지 않아 그 방향이 뚫려 있다.
-    # 뒷판은 측/상/하판과 두께가 달라도 되게(back_thk) 별도로 받는다.
+    #
+    # 실제 가구 짜임 순서를 그대로 따라 서로 겹치지 않게(면이 깨지지 않게) 만든다:
+    #   1) 측판(좌/우, panel_thk) — 세로/깊이 전체를 관통하는 기준 부재
+    #   2) 상/하판(panel_thk) — 측판 두께만큼 제외한 폭으로, 측판 사이에 낀다 (깊이는 전체 관통)
+    #   3) 뒷판(back_thk) — 측판 두께 + 상하판 두께를 모두 제외한 폭/높이로, 그 안쪽 맨 뒤에 낀다
+    # 이렇게 하면 5개 패널의 부피가 서로 겹치지 않아(경계면만 맞닿아) 겹친 면/여분의 선이 남지 않는다.
     def build_shell(target_entities, corner, u, v, n, cell_w, cell_h, depth, panel_thk, back_thk)
       group = target_entities.add_group
       entities = group.entities
 
-      far = corner.offset(u, cell_w).offset(v, cell_h).offset(n, depth)
+      # 1) 측판
+      fill_box_faces(entities, corner,
+                      corner.offset(u, panel_thk).offset(v, cell_h).offset(n, depth)) # 좌측판
+      fill_box_faces(entities, corner.offset(u, cell_w - panel_thk),
+                      corner.offset(u, cell_w).offset(v, cell_h).offset(n, depth)) # 우측판
 
-      fill_box_faces(entities, corner.offset(n, depth - back_thk), far) # 뒷판(얇게)
-      fill_box_faces(entities, corner, corner.offset(u, cell_w).offset(v, panel_thk).offset(n, depth)) # 하판
-      fill_box_faces(entities, corner.offset(v, cell_h - panel_thk), far) # 상판
-      fill_box_faces(entities, corner, corner.offset(u, panel_thk).offset(v, cell_h).offset(n, depth)) # 좌측판
-      fill_box_faces(entities, corner.offset(u, cell_w - panel_thk), far) # 우측판
+      # 2) 상/하판 — u방향으로 측판 두께만큼 안쪽에서 시작/종료
+      fill_box_faces(entities, corner.offset(u, panel_thk),
+                      corner.offset(u, cell_w - panel_thk).offset(v, panel_thk).offset(n, depth)) # 하판
+      fill_box_faces(entities, corner.offset(u, panel_thk).offset(v, cell_h - panel_thk),
+                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth)) # 상판
+
+      # 3) 뒷판 — u/v 모두 측판·상하판 두께만큼 안쪽에서 시작/종료
+      fill_box_faces(entities,
+                      corner.offset(u, panel_thk).offset(v, panel_thk).offset(n, depth - back_thk),
+                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h - panel_thk).offset(n, depth)) # 뒷판
 
       group
     end
