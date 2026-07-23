@@ -4626,12 +4626,6 @@ function fileToCompressedDataUrl(file, maxWidth) {
   });
 }
 
-function StageDeleteBtn({ onClick }) {
-  return (
-    <button onClick={onClick} title="삭제" style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${DASH.line}`, background: DASH.paper, color: DASH.red, fontSize: 12, flexShrink: 0 }}>✕</button>
-  );
-}
-
 /* ============================================================================
    결제 확인 필요 목록 — 프로젝트명 · 결제내용 · 결제기한 · 결제금액, 완료/미완료 탭
    ============================================================================ */
@@ -4706,11 +4700,6 @@ function PaymentsPage({ onBack }) {
       notionUpdatePageSafe(notionSync.workerUrl, current.notionPageId, { "완료": { checkbox: nextDone } });
     }
   }
-  function removePayment(id) {
-    const target = payments.find((p) => p.id === id);
-    setStore((prev) => ({ payments: prev.payments.filter((p) => p.id !== id) }));
-    if (target && target.notionPageId) notionSync.archivePage(target.notionPageId);
-  }
   function handleCopyAccount(p) {
     copyAccountDigits(p.account, () => {
       setCopiedId(p.id);
@@ -4770,7 +4759,6 @@ function PaymentsPage({ onBack }) {
                 <div style={{ fontSize: 12, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif", whiteSpace: "nowrap" }}>{(Number(p.amount) || 0).toLocaleString("ko-KR")}원</div>
                 <div style={{ fontSize: 10, color: DASH.inkFaint, whiteSpace: "nowrap" }}>{fmtYMDLabel(p.dueDate)} 기한</div>
               </div>
-              <StageDeleteBtn onClick={() => removePayment(p.id)} />
             </div>
           ))}
         </Card>
@@ -5177,25 +5165,21 @@ function EstimatePage({ onBack }) {
 }
 
 /* ============================================================================
-   입금 현황 — 프로젝트별 계약보증금·착공금·중도금·잔금 관리
-   노션 "입금 현황" DB와 연동됩니다. 제목 속성 이름은 "비고"입니다(원래 "이름"으로
-   만들었다가 노션에서 이름이 바뀌었어요 — 새로 만들 때 이 이름을 씁니다).
-   이미 있는 항목의 금액·상태는 전부 노션에서만 입력하는 값이라 여기서는 읽기
-   전용으로만 보여주고, 절대 덮어쓰지 않습니다. 입금예정일만 여기서 바꾸면 그
-   즉시 노션의 기존 항목에 반영됩니다. 유일한 예외는 자동 생성입니다 — 진행 중인
+   입금 현황 — 프로젝트별 계약보증금·착공금·중도금·잔금 보기
+   노션 "입금 현황" DB를 완전한 단방향(노션 → 대시보드)으로 미러링합니다.
+   제목 속성 이름은 "비고"입니다(원래 "이름"으로 만들었다가 노션에서 이름이
+   바뀌었어요 — 새로 만들 때 이 이름을 씁니다). 금액·상태·입금예정일 전부
+   노션에서만 입력·수정하는 값이고, 대시보드에서는 절대 값을 만들거나
+   바꾸지 않는 읽기 전용입니다. 유일한 예외는 자동 생성입니다 — 진행 중인
    프로젝트에 4개 항목 중 노션에 아직 없는 게 있으면 금액 0·미입금 상태의 빈
-   항목을 자동으로 만들어서, 담당자가 노션에서 금액만 채우면 되도록 합니다.
+   항목을 자동으로 만들어서, 담당자가 노션에서 채우면 되도록 합니다.
    그 외에는 60초마다 노션 → 대시보드로 다시 불러옵니다.
    ============================================================================ */
 
 const NOTION_DB_DEPOSITS = "ce4eb1355f3847998f72f2f6cef8288f";
 const DEPOSIT_TYPES = ["계약 보증금", "착공금", "중도금", "잔금"];
 
-function DepositRow({ type, entry, onCommit }) {
-  const [dueDate, setDueDate] = useState((entry && entry.dueDate) || "");
-
-  useEffect(() => { setDueDate((entry && entry.dueDate) || ""); }, [entry && entry.dueDate]);
-
+function DepositRow({ type, entry }) {
   if (!entry) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}` }}>
@@ -5206,7 +5190,7 @@ function DepositRow({ type, entry, onCommit }) {
   }
 
   const status = entry.status || "미입금";
-  const dueDateParsed = parseYMD(dueDate);
+  const dueDateParsed = parseYMD(entry.dueDate);
   const dueDateLabel = dueDateParsed
     ? `${dueDateParsed.getFullYear()} / ${String(dueDateParsed.getMonth() + 1).padStart(2, "0")} / ${String(dueDateParsed.getDate()).padStart(2, "0")}`
     : "미정";
@@ -5215,15 +5199,7 @@ function DepositRow({ type, entry, onCommit }) {
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}`, flexWrap: "wrap" }}>
       <div style={{ minWidth: 88, fontSize: 13, fontWeight: 700, color: DASH.navy }}>{type}</div>
       <div style={{ minWidth: 120, fontSize: 14, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{(Number(entry.amount) || 0).toLocaleString("ko-KR")}원</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <div style={{ fontSize: 10, color: DASH.inkFaint }}>입금예정일 : {dueDateLabel}</div>
-        <input
-          type="date"
-          value={dueDate}
-          onChange={(e) => { setDueDate(e.target.value); onCommit(type, { dueDate: e.target.value }); }}
-          style={{ ...stageInputStyle, width: 150 }}
-        />
-      </div>
+      <div style={{ fontSize: 12, color: DASH.inkSoft }}>입금예정일 : {dueDateLabel}</div>
       <span style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 100, background: status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: status === "입금완료" ? DASH.teal : DASH.red }}>{status}</span>
     </div>
   );
@@ -5359,19 +5335,6 @@ function DepositStatusPage({ onBack }) {
     return site.stage === "종료" || isFullyPaid(siteEntries);
   }
 
-  // 입금예정일만 씁니다 — 금액·상태는 전부 노션에만 있는 값이라 여기서 절대 만들거나
-  // 바꾸지 않고, 노션에 항목 자체가 없으면(금액이 아직 입력 안 됐으면) 쓰기를 시도하지 않습니다.
-  async function commitField(projectName, type, patch) {
-    const existing = entries.find((e) => e.projectName === projectName && e.type === type);
-    if (!existing || !existing.notionPageId) return;
-    const merged = { ...existing, ...patch };
-
-    setEntries((prev) => prev.map((e) => (e === existing ? merged : e)));
-
-    const props = {};
-    if (patch.dueDate !== undefined) props["입금예정일"] = merged.dueDate ? notionDateRangeProp(merged.dueDate, merged.dueDate) : { date: null };
-    await notionUpdatePageSafe(workerUrl, existing.notionPageId, props);
-  }
 
   return (
     <div style={{ minHeight: "100vh", background: DASH.paper, color: DASH.ink, fontFamily: "'Pretendard', 'Noto Serif KR', sans-serif" }}>
@@ -5382,7 +5345,7 @@ function DepositStatusPage({ onBack }) {
             onBack={onBack}
             eyebrow="Deposits"
             title="입금 현황"
-            desc="카드를 누르면 계약 보증금·착공금·중도금·잔금이 펼쳐져요. 금액·상태는 노션에서만 확인할 수 있고, 입금예정일은 여기서 바로 바꿀 수 있어요."
+            desc="카드를 누르면 계약 보증금·착공금·중도금·잔금이 펼쳐져요. 금액·상태·입금예정일 모두 노션 기준으로만 확인할 수 있는 읽기 전용 화면입니다."
           />
         </div>
 
@@ -5437,7 +5400,7 @@ function DepositStatusPage({ onBack }) {
                   {isExpanded && (
                     <div style={{ borderTop: `1px solid ${DASH.line}` }}>
                       {DEPOSIT_TYPES.map((type) => (
-                        <DepositRow key={type} type={type} entry={siteEntries.find((e) => e.type === type)} onCommit={(t, patch) => commitField(site.name, t, patch)} />
+                        <DepositRow key={type} type={type} entry={siteEntries.find((e) => e.type === type)} />
                       ))}
                     </div>
                   )}
