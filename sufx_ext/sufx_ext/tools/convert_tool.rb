@@ -94,11 +94,12 @@ module Sufx
 
     private
 
+    TINT_OFFSET_MM = 2.0
+    GRID_OFFSET_MM = 5.0 # 가이드선을 면에서 5mm 띄워서 z-fighting(흐리게/점선처럼 보이는 현상) 방지
+
     # 선택된 면 전체에 반투명 초록 컬러 틴트를 깐다(원본 툴 참고 UX).
     def draw_face_tint(view, face)
-      lift = face.normal.clone
-      lift.length = 0.02 # 기존 지오메트리와 겹쳐 그릴 때의 z-fighting 방지용 미세 오프셋
-      p0 = face.origin.offset(lift)
+      p0 = face.origin.offset(lift_vector(face, TINT_OFFSET_MM))
       p1 = p0.offset(face.u_axis, face.width)
       p2 = p1.offset(face.v_axis, face.height)
       p3 = p0.offset(face.v_axis, face.height)
@@ -110,38 +111,48 @@ module Sufx
     def draw_grid_lines(view, face, cell_w, cell_h)
       view.line_width = 2
       view.drawing_color = GRID_LINE_COLOR
+      origin = face.origin.offset(lift_vector(face, GRID_OFFSET_MM))
 
       (0..@cols).each do |c|
-        p0 = face.origin.offset(face.u_axis, c * cell_w)
+        p0 = origin.offset(face.u_axis, c * cell_w)
         p1 = p0.offset(face.v_axis, face.height)
         view.draw(GL_LINES, [p0, p1])
       end
       (0..@rows).each do |r|
-        p0 = face.origin.offset(face.v_axis, r * cell_h)
+        p0 = origin.offset(face.v_axis, r * cell_h)
         p1 = p0.offset(face.u_axis, face.width)
         view.draw(GL_LINES, [p0, p1])
       end
     end
 
+    # face.normal 방향으로 mm만큼 띄운 벡터를 만든다(z-fighting 방지용 공용 헬퍼).
+    def lift_vector(face, mm)
+      v = face.normal.clone
+      v.length = Units.mm_to_inch(mm)
+      v
+    end
+
     # 상단 바깥쪽에 열(칸) 폭 라벨(분홍 pill), 우측 바깥쪽에 행 높이 라벨(초록 pill)을 그린다.
     def draw_dimension_labels(view, face, cell_w, cell_h)
+      origin = face.origin.offset(lift_vector(face, GRID_OFFSET_MM))
+
       top_offset = face.v_axis.clone
       top_offset.length = [cell_h.to_f * 0.06, 0.3].max
       (0...@cols).each do |c|
-        point = face.origin
-                    .offset(face.u_axis, (c + 0.5) * cell_w)
-                    .offset(face.v_axis, face.height)
-                    .offset(top_offset)
+        point = origin
+                .offset(face.u_axis, (c + 0.5) * cell_w)
+                .offset(face.v_axis, face.height)
+                .offset(top_offset)
         draw_pill_label(view, point, format('%.0f', Units.inch_to_mm(cell_w)), LABEL_H_COLOR)
       end
 
       right_offset = face.u_axis.clone
       right_offset.length = [cell_w.to_f * 0.06, 0.3].max
       (0...@rows).each do |r|
-        point = face.origin
-                    .offset(face.v_axis, (r + 0.5) * cell_h)
-                    .offset(face.u_axis, face.width)
-                    .offset(right_offset)
+        point = origin
+                .offset(face.v_axis, (r + 0.5) * cell_h)
+                .offset(face.u_axis, face.width)
+                .offset(right_offset)
         draw_pill_label(view, point, format('%.0f', Units.inch_to_mm(cell_h)), LABEL_V_COLOR)
       end
     end
@@ -149,6 +160,11 @@ module Sufx
     # point(3D)를 화면에 투영해 그 자리에 배경색 pill + 흰 텍스트를 그린다.
     # 텍스트 폭 측정 API가 없어 글자수 기반으로 배경 크기를 근사한다.
     def draw_pill_label(view, point, text, bg_color)
+      draw_pill_background(view, point, text, bg_color)
+      draw_pill_text(view, point, text)
+    end
+
+    def draw_pill_background(view, point, text, bg_color)
       screen = view.screen_coords(point)
       return if screen.x.zero? && screen.y.zero?
 
@@ -167,10 +183,16 @@ module Sufx
       ]
       view.drawing_color = bg_color
       view.draw2d(GL_POLYGON, rect)
-
-      view.draw_text(point, text, color: 'white', size: 11, align: TextAlignCenter)
     rescue StandardError
-      nil # 화면 밖 투영 등으로 실패해도 나머지 라벨/그리드 렌더링은 계속되게 한다
+      nil # 화면 밖 투영 등으로 배경 렌더링만 실패해도 텍스트 시도는 계속한다
+    end
+
+    # 배경 pill과 별도로 그린다 — 하나가 실패해도 다른 하나는 남게 하기 위함.
+    # options는 Ruby 버전별 키워드인자 암묵 변환 이슈를 피하려고 명시적 Hash 리터럴로 전달한다.
+    def draw_pill_text(view, point, text)
+      view.draw_text(point, text, { color: 'white', size: 11 })
+    rescue StandardError => e
+      warn "[SUFX] draw_text 실패: #{e.message}"
     end
 
     # 화면 고정 위치(스크린 좌표)에 항상 보이는 안내 문구를 그린다.
