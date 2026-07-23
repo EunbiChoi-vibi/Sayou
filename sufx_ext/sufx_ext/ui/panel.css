@@ -1,0 +1,180 @@
+:root {
+  color-scheme: light dark;
+  --sufx-bg: #f4f5f7;
+  --sufx-card: #ffffff;
+  --sufx-border: #dfe2e6;
+  --sufx-text: #1f2329;
+  --sufx-muted: #7a828e;
+  --sufx-accent: #2f6feb;
+  --sufx-accent-text: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
+  background: var(--sufx-bg);
+  color: var(--sufx-text);
+  font-size: 13px;
+}
+
+.sufx-header {
+  padding: 10px 14px;
+  background: var(--sufx-card);
+  border-bottom: 1px solid var(--sufx-border);
+}
+
+.sufx-header .title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.sufx-panel {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--sufx-border);
+  margin: 4px 0;
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--sufx-muted);
+  margin-top: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.row label {
+  font-size: 11px;
+  color: var(--sufx-muted);
+  white-space: nowrap;
+}
+
+.btn {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--sufx-border);
+  background: var(--sufx-card);
+  color: var(--sufx-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s ease, transform 0.05s ease;
+}
+
+.btn:hover {
+  background: #eef1f5;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--sufx-accent);
+  color: var(--sufx-accent-text);
+  border-color: var(--sufx-accent);
+  font-weight: 700;
+}
+
+.btn-primary:hover {
+  background: #275bc4;
+}
+
+.btn-toggle {
+  font-weight: 600;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.input-mm, .input-count {
+  width: 56px;
+  padding: 6px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--sufx-border);
+  background: var(--sufx-card);
+  color: var(--sufx-text);
+}
+
+.status-text {
+  font-size: 11px;
+  color: var(--sufx-muted);
+  padding: 2px 2px 4px;
+}
+
+.gap-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.gap-mid {
+  display: flex;
+  gap: 4px;
+}
+
+.gap-btn {
+  flex: none;
+  width: 48px;
+}
+
+.gap-reset {
+  font-weight: 700;
+  background: #eef1f5;
+}
+
+.sufx-footer {
+  padding: 6px 14px;
+  border-top: 1px solid var(--sufx-border);
+  min-height: 16px;
+}
+
+.status-line {
+  font-size: 11px;
+  color: #c0392b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sufx-bg: #1e2126;
+    --sufx-card: #2a2e35;
+    --sufx-border: #3a3f47;
+    --sufx-text: #eceff2;
+    --sufx-muted: #9aa2ad;
+  }
+
+  .btn:hover {
+    background: #33383f;
+  }
+
+  .gap-reset {
+    background: #33383f;
+  }
+}
