@@ -5298,15 +5298,14 @@ function DepositStatusPage({ onBack }) {
     retryNow: fetchEntries,
   };
 
-  // 계약 보증금·착공금·중도금·잔금 4개가 전부 등록돼 있고, 숨긴 항목을 빼고는 전부 입금완료면
-  // "다 끝난 프로젝트"로 보고 카드를 목록에서 자동으로 숨깁니다. 하나라도 노션에 아직
-  // 등록 안 됐으면(=확인이 안 됐으면) 완료로 치지 않습니다.
+  // 노션에 등록된 항목 중 숨김 처리 안 된 것들이 전부 입금완료면 "다 끝난 프로젝트"로 보고
+  // 카드를 목록에서 자동으로 숨깁니다. 4개 항목이 다 등록돼 있을 필요는 없고(중도금처럼
+  // 해당 프로젝트에 필요 없는 항목은 아예 안 만들 수도 있으니까요), 노션 항목 자체가
+  // 하나도 없으면(아직 아무것도 확인 안 됐으면) 완료로 치지 않습니다.
   function isFullyPaid(siteEntries) {
-    return DEPOSIT_TYPES.every((type) => {
-      const e = siteEntries.find((x) => x.type === type);
-      if (!e) return false;
-      return e.hidden || e.status === "입금완료";
-    });
+    const visible = siteEntries.filter((e) => !e.hidden);
+    if (visible.length === 0) return false;
+    return visible.every((e) => e.status === "입금완료");
   }
 
   // 노션 "프로젝트 목록"의 단계가 "완료"(usePipelineLookup에서 "종료"로 맞춰 옵니다)인
