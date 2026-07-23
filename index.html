@@ -5200,7 +5200,7 @@ function DepositRow({ type, entry }) {
       <div style={{ minWidth: 88, fontSize: 13, fontWeight: 700, color: DASH.navy }}>{type}</div>
       <div style={{ minWidth: 120, fontSize: 14, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{(Number(entry.amount) || 0).toLocaleString("ko-KR")}원</div>
       <div style={{ fontSize: 12, color: DASH.inkSoft }}>입금예정일 : {dueDateLabel}</div>
-      <span style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 100, background: status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: status === "입금완료" ? DASH.teal : DASH.red }}>{status}</span>
+      <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 100, background: status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: status === "입금완료" ? DASH.teal : DASH.red }}>{status}</span>
     </div>
   );
 }
