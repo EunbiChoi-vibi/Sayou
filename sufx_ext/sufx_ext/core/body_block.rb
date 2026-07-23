@@ -135,27 +135,32 @@ module Sufx
     #      맨 뒤(n 방향 끝)에 얇게 낀다
     #   3) 상/하판(panel_thk) — 가로는 측판 두께, 깊이는 뒷판 두께를 제외한 범위(뒷판 앞쪽)까지
     # 이렇게 하면 5개 패널의 부피가 서로 겹치지 않아(경계면만 맞닿아) 겹친 면/여분의 선이 남지 않는다.
+    #
+    # 각 패널은 create_box로 "자기만의 서브그룹" 안에 따로 만든다 — 5개를 전부 같은
+    # entities에 직접 채우면(구버전 방식) 서로 맞닿는 경계에서 SketchUp이 지오메트리를
+    # 자동 병합/분할하다가 특정 면(특히 하판)이 사라지는 문제가 있었다. 서브그룹으로
+    # 격리하면 패널끼리 절대 서로의 지오메트리에 영향을 주지 않는다.
     def build_shell(target_entities, corner, u, v, n, cell_w, cell_h, depth, panel_thk, back_thk)
       group = target_entities.add_group
       entities = group.entities
       depth_front = depth - back_thk # 상/하판이 차지하는 깊이(뒷판 두께만큼 제외)
 
       # 1) 측판 — 세로/깊이 전체 관통
-      fill_box_faces(entities, corner,
-                      corner.offset(u, panel_thk).offset(v, cell_h).offset(n, depth)) # 좌측판
-      fill_box_faces(entities, corner.offset(u, cell_w - panel_thk),
-                      corner.offset(u, cell_w).offset(v, cell_h).offset(n, depth)) # 우측판
+      create_box(entities, corner,
+                 corner.offset(u, panel_thk).offset(v, cell_h).offset(n, depth)) # 좌측판
+      create_box(entities, corner.offset(u, cell_w - panel_thk),
+                 corner.offset(u, cell_w).offset(v, cell_h).offset(n, depth)) # 우측판
 
       # 2) 뒷판 — 세로는 측판과 동일(풀 하이트), 가로는 측판 두께 제외, 맨 뒤에 얇게
-      fill_box_faces(entities,
-                      corner.offset(u, panel_thk).offset(n, depth - back_thk),
-                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth)) # 뒷판
+      create_box(entities,
+                 corner.offset(u, panel_thk).offset(n, depth - back_thk),
+                 corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth)) # 뒷판
 
       # 3) 상/하판 — 가로는 측판 두께 제외, 깊이는 뒷판 두께만큼 제외(뒷판과 안 겹치게)
-      fill_box_faces(entities, corner.offset(u, panel_thk),
-                      corner.offset(u, cell_w - panel_thk).offset(v, panel_thk).offset(n, depth_front)) # 하판
-      fill_box_faces(entities, corner.offset(u, panel_thk).offset(v, cell_h - panel_thk),
-                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth_front)) # 상판
+      create_box(entities, corner.offset(u, panel_thk),
+                 corner.offset(u, cell_w - panel_thk).offset(v, panel_thk).offset(n, depth_front)) # 하판
+      create_box(entities, corner.offset(u, panel_thk).offset(v, cell_h - panel_thk),
+                 corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth_front)) # 상판
 
       group
     end
