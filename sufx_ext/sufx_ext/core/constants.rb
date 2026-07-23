@@ -22,6 +22,7 @@ module Sufx
     TAG_DOORLINE     = 'SUFX_DOORLINE'.freeze
     TAG_HIDDEN       = 'SUFX_HIDDEN'.freeze
     TAG_VALANCE      = 'SUFX_VALANCE'.freeze
+    TAG_CHANNEL      = 'SUFX_CHANNEL'.freeze
 
     NAME_BODY    = 'SUFX_BODY'.freeze
     NAME_DOOR    = 'SUFX_DOOR'.freeze

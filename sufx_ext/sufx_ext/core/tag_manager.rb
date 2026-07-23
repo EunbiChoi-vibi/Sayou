@@ -4,6 +4,7 @@ module Sufx
   #   SUFX
   #   ├── SUFX_BODY
   #   ├── SUFX_VALANCE
+  #   ├── SUFX_CHANNEL
   #   └── DOOR
   #       ├── SUFX_DOOR
   #       ├── SUFX_DOORLINE
@@ -60,6 +61,7 @@ module Sufx
       ensure_folder(model, Constants::TAG_ROOT)
       ensure_tag(model, Constants::TAG_BODY, folder_name: Constants::TAG_ROOT)
       ensure_tag(model, Constants::TAG_VALANCE, folder_name: Constants::TAG_ROOT)
+      ensure_tag(model, Constants::TAG_CHANNEL, folder_name: Constants::TAG_ROOT)
 
       door_folder = ensure_folder(model, Constants::TAG_DOOR_FOLDER)
       root_folder = find_folder(model, Constants::TAG_ROOT)
