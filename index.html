@@ -5433,6 +5433,7 @@ function AsPage({ onBack }) {
   const [dbId, setDbId] = useState(NOTION_DB_AS);
   const [workerUrl, setWorkerUrl] = useState(DEFAULT_WORKER_URL);
   const [syncStatus, setSyncStatus] = useState({ type: "idle", text: "" });
+  const [tab, setTab] = useState("pending"); // 'pending' | 'done'
 
   const pipelineLookup = usePipelineLookup();
 
@@ -5470,6 +5471,7 @@ function AsPage({ onBack }) {
             date: range.start.slice(0, 10),
             endDate: (range.end || range.start).slice(0, 10),
             note: notionPlainText(props["특이사항"]),
+            status: notionPlainText(props["AS상태"]) || "미완료",
           };
         })
         .filter(Boolean);
@@ -5500,8 +5502,12 @@ function AsPage({ onBack }) {
     retryNow: fetchEntries,
   };
 
+  const pending = entries.filter((e) => e.status !== "완료");
+  const done = entries.filter((e) => e.status === "완료");
+  const shown = tab === "pending" ? pending : done;
+
   const byProject = new Map();
-  entries.forEach((e) => {
+  shown.forEach((e) => {
     if (!byProject.has(e.projectName)) byProject.set(e.projectName, []);
     byProject.get(e.projectName).push(e);
   });
@@ -5524,11 +5530,20 @@ function AsPage({ onBack }) {
           </Card>
         )}
 
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          <button onClick={() => setTab("pending")} style={{ fontSize: 12.5, fontWeight: 700, padding: "8px 16px", borderRadius: 100, border: `1px solid ${tab === "pending" ? DASH.navy : DASH.line}`, background: tab === "pending" ? DASH.navy : DASH.surface, color: tab === "pending" ? "#fff" : DASH.inkSoft }}>
+            미완료 ({pending.length})
+          </button>
+          <button onClick={() => setTab("done")} style={{ fontSize: 12.5, fontWeight: 700, padding: "8px 16px", borderRadius: 100, border: `1px solid ${tab === "done" ? DASH.navy : DASH.line}`, background: tab === "done" ? DASH.navy : DASH.surface, color: tab === "done" ? "#fff" : DASH.inkSoft }}>
+            완료 ({done.length})
+          </button>
+        </div>
+
         {loading && entries.length === 0 ? (
           <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>조회 중...</div>
         ) : projectNames.length === 0 ? (
           <Card style={{ padding: 0 }}>
-            <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>등록된 AS 일정이 없습니다.</div>
+            <div style={{ fontSize: 12.5, color: DASH.inkFaint, textAlign: "center", padding: "30px 0" }}>{tab === "pending" ? "미완료 AS 일정이 없습니다." : "완료된 AS 일정이 없습니다."}</div>
           </Card>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -5543,6 +5558,7 @@ function AsPage({ onBack }) {
                         <div style={{ fontSize: 13.5, fontWeight: 600, color: DASH.ink }}>{e.type && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: DASH.brassSoft, color: "#6B5A3E", marginRight: 6 }}>{e.type}</span>}{e.title}</div>
                         {e.note && <div style={{ fontSize: 11.5, color: DASH.inkSoft }}>{e.note}</div>}
                       </div>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 100, background: e.status === "완료" ? DASH.tealSoft : DASH.redSoft, color: e.status === "완료" ? DASH.teal : DASH.red, flexShrink: 0 }}>{e.status}</span>
                     </div>
                   ))}
                 </Card>
