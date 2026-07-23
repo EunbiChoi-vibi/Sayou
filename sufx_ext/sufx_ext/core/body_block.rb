@@ -97,11 +97,21 @@ module Sufx
     # Convert 격자의 셀 (row,col) 하나에 해당하는 바디블럭 지오메트리를 만든다.
     # 통짜 솔리드가 아니라, 선택한 면 쪽만 열려있는 5면 캐비닛 쉘(상/하/좌/우판 + 얇은 뒷판)로 만든다
     # — 실제 원본 툴의 "칸막이 박스" 형태를 재현한다.
-    def build_cell_body(model, source_group, face, row, col, cell_w, cell_h, panel_thk_mm: nil, back_thk_mm: nil)
-      depth = depth_along_normal(source_group.bounds, face.normal)
+    #
+    # setback_mm: 문이 나중에 들어갈 자리만큼(기본 door_thk+body_gap) 앞부분을 아예 비워두고
+    # 그만큼 안쪽에서부터 쉘을 만든다. 이렇게 해두면 Door 생성 시 바디를 추가로 깎지 않아도
+    # 도어-바디 최종 간격이 정확히 body_gap이 된다(§도어 생성 참고).
+    def build_cell_body(model, source_group, face, row, col, cell_w, cell_h,
+                         panel_thk_mm: nil, back_thk_mm: nil, setback_mm: nil)
+      depth_full = depth_along_normal(source_group.bounds, face.normal)
       panel_thk = Units.mm_to_inch(panel_thk_mm || Constants::DEFAULT_PANEL_THK)
       back_thk = Units.mm_to_inch(back_thk_mm || Constants::DEFAULT_BACK_PANEL_THK)
-      corner = face.origin.offset(face.u_axis, col * cell_w).offset(face.v_axis, row * cell_h)
+      setback = Units.mm_to_inch(setback_mm || (Constants::DEFAULT_DOOR_THK + Constants::DEFAULT_BODY_GAP))
+      setback = 0 if setback >= depth_full # 마스가 셋백보다 얕으면 셋백을 포기(안전장치)
+
+      base_corner = face.origin.offset(face.u_axis, col * cell_w).offset(face.v_axis, row * cell_h)
+      corner = base_corner.offset(face.normal.reverse, setback)
+      depth = depth_full - setback
 
       # 패널 두께를 감당하기엔 셀/깊이가 너무 작으면 통짜 솔리드로 대체(안전장치).
       if (panel_thk * 2) >= [cell_w, cell_h].min || back_thk >= depth
@@ -134,67 +144,8 @@ module Sufx
       group
     end
 
-    # 기존 바디블럭 인스턴스를 min_pt~max_pt 범위의 open-front 쉘로 다시 만든다
-    # (Door 부착 시 바디 사후축소 등에서 사용 — 쉘 구조를 유지한 채 깊이만 줄인다).
-    # front_normal_vec: 열려있는(문이 달릴) 면의 바깥쪽 방향(월드축 정렬 단위벡터).
-    def rebuild_body_shell!(instance, min_pt, max_pt, front_normal_vec, panel_thk_inch, back_thk_inch)
-      axis = dominant_axis(front_normal_vec)
-      depth = (max_pt.send(axis) - min_pt.send(axis)).abs
-      other_axes = %i[x y z] - [axis]
-      span = other_axes.map { |a| (max_pt.send(a) - min_pt.send(a)).abs }
-
-      # 셀/깊이가 패널 두께를 감당 못 하면 통짜 솔리드로 안전하게 대체.
-      if (panel_thk_inch * 2) >= span.min || back_thk_inch >= depth
-        return redefine_box!(instance, min_pt, max_pt)
-      end
-
-      instance.make_unique if instance.respond_to?(:make_unique)
-      definition = instance.respond_to?(:definition) ? instance.definition : instance
-      entities = definition.entities
-      entities.clear!
-
-      lo = { x: [min_pt.x, max_pt.x].min, y: [min_pt.y, max_pt.y].min, z: [min_pt.z, max_pt.z].min }
-      hi = { x: [min_pt.x, max_pt.x].max, y: [min_pt.y, max_pt.y].max, z: [min_pt.z, max_pt.z].max }
-      open_at_max = front_normal_vec.send(axis) >= 0
-
-      # 뒷판: 열린 면의 반대쪽 끝에서 back_thk_inch만큼
-      back_lo = lo.dup
-      back_hi = hi.dup
-      if open_at_max
-        back_hi[axis] = lo[axis] + back_thk_inch
-      else
-        back_lo[axis] = hi[axis] - back_thk_inch
-      end
-      fill_box_faces(entities, pt(back_lo), pt(back_hi))
-
-      # 나머지 4개 벽(상하좌우 상당) — depth 축 전체를 관통하는 두 얇은 슬랩씩.
-      other_axes.each do |a|
-        min_slab_hi = hi.dup
-        min_slab_hi[a] = lo[a] + panel_thk_inch
-        fill_box_faces(entities, pt(lo), pt(min_slab_hi))
-
-        max_slab_lo = lo.dup
-        max_slab_lo[a] = hi[a] - panel_thk_inch
-        fill_box_faces(entities, pt(max_slab_lo), pt(hi))
-      end
-
-      instance
-    end
-
-    def pt(h)
-      Geom::Point3d.new(h[:x], h[:y], h[:z])
-    end
-
-    def dominant_axis(vec)
-      ax, ay, az = vec.x.abs, vec.y.abs, vec.z.abs
-      return :x if ax >= ay && ax >= az
-      return :y if ay >= az
-
-      :z
-    end
-
     # entity를 바디블럭 컴포넌트로 확정하고 이름/속성/태그를 세팅한다 (§4.1a).
-    def make_body_block(entity, origin_mass_dims: nil, front_normal: nil)
+    def make_body_block(entity, origin_mass_dims: nil, front_normal: nil, door_thk_mm: nil, body_gap_mm: nil)
       model = Sketchup.active_model
       comp = entity.is_a?(Sketchup::ComponentInstance) ? entity : entity.to_component
       comp.definition.name = Naming.next_name(Constants::NAME_BODY)
@@ -202,8 +153,8 @@ module Sufx
       dims = origin_mass_dims || bounds_dims_mm(comp.bounds)
       Attrs.set_all(comp,
         'block_type' => 'body',
-        'door_thk' => Constants::DEFAULT_DOOR_THK,
-        'body_gap' => Constants::DEFAULT_BODY_GAP,
+        'door_thk' => door_thk_mm || Constants::DEFAULT_DOOR_THK,
+        'body_gap' => body_gap_mm || Constants::DEFAULT_BODY_GAP,
         'panel_thk' => Constants::DEFAULT_PANEL_THK,
         'back_panel_thk' => Constants::DEFAULT_BACK_PANEL_THK,
         'gap_top' => 0.0,

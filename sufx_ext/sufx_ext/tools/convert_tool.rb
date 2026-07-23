@@ -6,8 +6,11 @@ module Sufx
     KEY_RETURN = 13
 
     # 선택 유효성(그룹 1개)을 먼저 검사한 뒤 툴을 활성화한다.
+    # door_thk_mm/body_gap_mm: 패널에 현재 입력된 DOOR THK/BODY GAP 값.
+    # Convert 시점에 이 합(기본 22mm)만큼 미리 셋백해서 쉘을 만들어 두면,
+    # 나중에 Door를 붙일 때 바디를 더 깎지 않아도 최종 간격이 body_gap과 정확히 맞는다.
     # 반환값은 다른 커맨드들과 동일하게 [성공여부, 실패사유] 형태.
-    def self.start!
+    def self.start!(door_thk_mm = nil, body_gap_mm = nil)
       model = Sketchup.active_model
       selection = model.selection
       if selection.size.zero?
@@ -22,16 +25,18 @@ module Sufx
         return [false, msg]
       end
 
-      model.select_tool(new(selection.first))
+      model.select_tool(new(selection.first, door_thk_mm, body_gap_mm))
       [true, nil]
     end
 
-    def initialize(group)
+    def initialize(group, door_thk_mm = nil, body_gap_mm = nil)
       @group = group
       @rows = 1
       @cols = 1
       @base_face_index = 0
       @candidate_faces = BodyBlock.collect_outer_faces(@group)
+      @door_thk_mm = door_thk_mm || Constants::DEFAULT_DOOR_THK
+      @body_gap_mm = body_gap_mm || Constants::DEFAULT_BODY_GAP
     end
 
     def activate
@@ -218,10 +223,13 @@ module Sufx
       model.start_operation('SUFX Convert', true)
       begin
         front_normal = [face.normal.x, face.normal.y, face.normal.z]
+        setback_mm = @door_thk_mm + @body_gap_mm
         (0...@rows).each do |r|
           (0...@cols).each do |c|
-            cell_group = BodyBlock.build_cell_body(model, @group, face, r, c, cell_w, cell_h)
-            BodyBlock.make_body_block(cell_group, front_normal: front_normal)
+            cell_group = BodyBlock.build_cell_body(model, @group, face, r, c, cell_w, cell_h,
+                                                    setback_mm: setback_mm)
+            BodyBlock.make_body_block(cell_group, front_normal: front_normal,
+                                                   door_thk_mm: @door_thk_mm, body_gap_mm: @body_gap_mm)
           end
         end
         @group.erase! unless @group.deleted?

@@ -2,9 +2,12 @@ module Sufx
   module Commands
     # §4.5 DOOR 생성 (좌경/우경/반반/서랍).
     #
-    # 정합 규칙: Convert/Divide 단계에서는 바디를 원래 치수 그대로 두고,
-    # "도어가 실제로 부착되는 시점"에 그 바디만 door_thk+body_gap 만큼
-    # 사후 축소한다(문서 §4.5 권장안 채택).
+    # 정합 규칙: 바디는 Convert 시점에 이미 door_thk+body_gap만큼 셋백되어 만들어진다
+    # (core/body_block.rb#build_cell_body 참고). 그래서 여기서는 바디를 추가로 깎지
+    # 않고, 이미 셋백된 바디 앞면(front_y = combined.min.y)을 기준으로 body_gap만큼
+    # 띄워서 도어를 놓기만 하면 도어-바디 최종 간격이 정확히 body_gap이 된다.
+    # (Convert 이전 구버전 바디처럼 셋백 없이 만들어진 바디가 선택된 경우에도, 그
+    # 상태 그대로 도어가 body_gap만큼 띄워져 붙는다 — 추가 축소를 하지 않을 뿐이다.)
     #
     # 방향 가정: 바디블럭의 정면은 -Y 방향(Convert 기본면 index 0과 동일)이라고 가정한다.
     module DoorCreate
@@ -44,7 +47,6 @@ module Sufx
           door_comps = build_doors(model, combined, door_type, door_thk_mm, door_thk_inch,
                                     body_gap_mm, body_gap_inch, gaps, channel_mode, first_body)
           build_doorline(model, door_comps)
-          shrink_bodies_for_door(bodies, door_thk_inch, body_gap_inch)
 
           model.commit_operation
           model.selection.clear
@@ -127,25 +129,6 @@ module Sufx
           ]
           group.entities.add_edges(pts + [pts.first])
           TagManager.assign(model, group, "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOORLINE}")
-        end
-      end
-
-      # 도어가 부착되는 만큼 바디 깊이를 줄이되, 통짜 솔리드로 뭉개지 않고
-      # 5면 캐비닛 쉘(상/하/좌/우판 + 얇은 뒷판) 구조를 유지한 채로 다시 만든다.
-      def shrink_bodies_for_door(bodies, door_thk_inch, body_gap_inch)
-        shrink = door_thk_inch + body_gap_inch
-        bodies.each do |body|
-          next if body.deleted?
-
-          bounds = body.bounds
-          new_min = Geom::Point3d.new(bounds.min.x, bounds.min.y + shrink, bounds.min.z)
-
-          panel_thk = Units.mm_to_inch(Attrs.get(body, 'panel_thk', Constants::DEFAULT_PANEL_THK).to_f)
-          back_thk = Units.mm_to_inch(Attrs.get(body, 'back_panel_thk', Constants::DEFAULT_BACK_PANEL_THK).to_f)
-          normal = Attrs.get(body, 'front_normal', [0.0, -1.0, 0.0])
-          front_normal = Geom::Vector3d.new(normal[0], normal[1], normal[2])
-
-          BodyBlock.rebuild_body_shell!(body, new_min, bounds.max, front_normal, panel_thk, back_thk)
         end
       end
     end

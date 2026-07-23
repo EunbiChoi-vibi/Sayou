@@ -40,7 +40,9 @@ module Sufx
 
     def register_callbacks(dialog)
       dialog.add_action_callback('onConvertClick') do |_ctx|
-        ok, msg = SufxConvertTool.start!
+        thk = @door_thk || Constants::DEFAULT_DOOR_THK
+        gap = @body_gap || Constants::DEFAULT_BODY_GAP
+        ok, msg = SufxConvertTool.start!(thk, gap)
         notify_result(dialog, ok, msg)
       end
 
