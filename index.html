@@ -5178,13 +5178,14 @@ function EstimatePage({ onBack }) {
 
 /* ============================================================================
    입금 현황 — 프로젝트별 계약보증금·착공금·중도금·잔금 관리
-   노션 "입금 현황" DB와 연동됩니다. 이미 있는 항목의 금액·상태·숨김은 전부
-   노션에서만 입력하는 값이라 여기서는 읽기 전용으로만 보여주고, 절대 덮어쓰지
-   않습니다. 입금예정일만 여기서 바꾸면 그 즉시 노션의 기존 항목에 반영됩니다.
-   유일한 예외는 자동 생성입니다 — 진행 중인 프로젝트에 4개 항목 중 노션에
-   아직 없는 게 있으면 금액 0·미입금 상태의 빈 항목을 자동으로 만들어서,
-   담당자가 노션에서 금액만 채우면 되도록 합니다. 그 외에는 60초마다
-   노션 → 대시보드로 다시 불러옵니다.
+   노션 "입금 현황" DB와 연동됩니다. 제목 속성 이름은 "비고"입니다(원래 "이름"으로
+   만들었다가 노션에서 이름이 바뀌었어요 — 새로 만들 때 이 이름을 씁니다).
+   이미 있는 항목의 금액·상태는 전부 노션에서만 입력하는 값이라 여기서는 읽기
+   전용으로만 보여주고, 절대 덮어쓰지 않습니다. 입금예정일만 여기서 바꾸면 그
+   즉시 노션의 기존 항목에 반영됩니다. 유일한 예외는 자동 생성입니다 — 진행 중인
+   프로젝트에 4개 항목 중 노션에 아직 없는 게 있으면 금액 0·미입금 상태의 빈
+   항목을 자동으로 만들어서, 담당자가 노션에서 금액만 채우면 되도록 합니다.
+   그 외에는 60초마다 노션 → 대시보드로 다시 불러옵니다.
    ============================================================================ */
 
 const NOTION_DB_DEPOSITS = "ce4eb1355f3847998f72f2f6cef8288f";
@@ -5205,14 +5206,13 @@ function DepositRow({ type, entry, onCommit }) {
   }
 
   const status = entry.status || "미입금";
-  const isHidden = !!entry.hidden;
   const dueDateParsed = parseYMD(dueDate);
   const dueDateLabel = dueDateParsed
     ? `${dueDateParsed.getFullYear()} / ${String(dueDateParsed.getMonth() + 1).padStart(2, "0")} / ${String(dueDateParsed.getDate()).padStart(2, "0")}`
     : "미정";
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}`, opacity: isHidden ? 0.5 : 1, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}`, flexWrap: "wrap" }}>
       <div style={{ minWidth: 88, fontSize: 13, fontWeight: 700, color: DASH.navy }}>{type}</div>
       <div style={{ minWidth: 120, fontSize: 14, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{(Number(entry.amount) || 0).toLocaleString("ko-KR")}원</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -5225,9 +5225,6 @@ function DepositRow({ type, entry, onCommit }) {
         />
       </div>
       <span style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 100, background: status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: status === "입금완료" ? DASH.teal : DASH.red }}>{status}</span>
-      {isHidden && (
-        <span style={{ marginLeft: "auto", fontSize: 10.5, fontWeight: 600, color: DASH.inkFaint }}>노션에서 숨김 처리됨</span>
-      )}
     </div>
   );
 }
@@ -5241,7 +5238,6 @@ function DepositStatusPage({ onBack }) {
   const [workerUrl, setWorkerUrl] = useState(DEFAULT_WORKER_URL);
   const [syncStatus, setSyncStatus] = useState({ type: "idle", text: "" });
   const [expandedProject, setExpandedProject] = useState(null);
-  const [showHidden, setShowHidden] = useState(false);
   const autoCreateAttempted = useRef(new Set());
 
   const pipelineLookup = usePipelineLookup();
@@ -5279,7 +5275,6 @@ function DepositStatusPage({ onBack }) {
           amount: Number(notionPlainText(props["금액"])) || 0,
           dueDate: range ? range.start.slice(0, 10) : "",
           status: props["상태"]?.select?.name || "미입금",
-          hidden: !!props["숨김"]?.checkbox,
         };
       });
       setEntries(items);
@@ -5320,12 +5315,11 @@ function DepositStatusPage({ onBack }) {
         (async () => {
           try {
             const page = await notionCreatePage(workerUrl, dbId, {
-              "이름": notionTitleProp(`${site.name} - ${type}`),
+              "비고": notionTitleProp(`${site.name} - ${type}`),
               "프로젝트명 1": notionRelationProp(site.notionPageId),
               "구분": notionSelectProp(type),
               "금액": notionNumberProp(0),
               "상태": notionSelectProp("미입금"),
-              "숨김": { checkbox: false },
             });
             setEntries((prev) => [...prev, {
               notionPageId: page.id,
@@ -5335,7 +5329,6 @@ function DepositStatusPage({ onBack }) {
               amount: 0,
               dueDate: "",
               status: "미입금",
-              hidden: false,
             }]);
           } catch (e) {
             autoCreateAttempted.current.delete(key); // 실패하면 다음 조회 때 다시 시도할 수 있게 둡니다
@@ -5351,14 +5344,13 @@ function DepositStatusPage({ onBack }) {
     retryNow: fetchEntries,
   };
 
-  // 노션에 등록된 항목 중 숨김 처리 안 된 것들이 전부 입금완료면 "다 끝난 프로젝트"로 보고
-  // 카드를 목록에서 자동으로 숨깁니다. 4개 항목이 다 등록돼 있을 필요는 없고(중도금처럼
-  // 해당 프로젝트에 필요 없는 항목은 아예 안 만들 수도 있으니까요), 노션 항목 자체가
+  // 노션에 등록된 항목이 전부 입금완료면 "다 끝난 프로젝트"로 보고 카드를 목록에서
+  // 자동으로 숨깁니다. 4개 항목이 다 등록돼 있을 필요는 없고(중도금처럼 해당
+  // 프로젝트에 필요 없는 항목은 아예 안 만들 수도 있으니까요), 노션 항목 자체가
   // 하나도 없으면(아직 아무것도 확인 안 됐으면) 완료로 치지 않습니다.
   function isFullyPaid(siteEntries) {
-    const visible = siteEntries.filter((e) => !e.hidden);
-    if (visible.length === 0) return false;
-    return visible.every((e) => e.status === "입금완료");
+    if (siteEntries.length === 0) return false;
+    return siteEntries.every((e) => e.status === "입금완료");
   }
 
   // 노션 "프로젝트 목록"의 단계가 "완료"(usePipelineLookup에서 "종료"로 맞춰 옵니다)인
@@ -5367,7 +5359,7 @@ function DepositStatusPage({ onBack }) {
     return site.stage === "종료" || isFullyPaid(siteEntries);
   }
 
-  // 입금예정일만 씁니다 — 금액·상태·숨김은 전부 노션에만 있는 값이라 여기서 절대 만들거나
+  // 입금예정일만 씁니다 — 금액·상태는 전부 노션에만 있는 값이라 여기서 절대 만들거나
   // 바꾸지 않고, 노션에 항목 자체가 없으면(금액이 아직 입력 안 됐으면) 쓰기를 시도하지 않습니다.
   async function commitField(projectName, type, patch) {
     const existing = entries.find((e) => e.projectName === projectName && e.type === type);
@@ -5413,18 +5405,15 @@ function DepositStatusPage({ onBack }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {pipelineLookup.sites.filter((site) => !isCardHidden(site, entries.filter((e) => e.projectName === site.name))).map((site) => {
               const siteEntries = entries.filter((e) => e.projectName === site.name);
-              const visibleEntries = siteEntries.filter((e) => !e.hidden);
-              const contractTotal = visibleEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-              const paidTotal = visibleEntries.filter((e) => e.status === "입금완료").reduce((s, e) => s + (Number(e.amount) || 0), 0);
-              const unpaidTotal = visibleEntries.filter((e) => e.status !== "입금완료").reduce((s, e) => s + (Number(e.amount) || 0), 0);
+              const contractTotal = siteEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+              const paidTotal = siteEntries.filter((e) => e.status === "입금완료").reduce((s, e) => s + (Number(e.amount) || 0), 0);
+              const unpaidTotal = siteEntries.filter((e) => e.status !== "입금완료").reduce((s, e) => s + (Number(e.amount) || 0), 0);
               const isExpanded = expandedProject === site.name;
-              const visibleTypes = DEPOSIT_TYPES.filter((t) => !(siteEntries.find((e) => e.type === t) || {}).hidden);
-              const hiddenTypes = DEPOSIT_TYPES.filter((t) => (siteEntries.find((e) => e.type === t) || {}).hidden);
 
               return (
                 <Card key={site.id} style={{ padding: 0, overflow: "hidden" }}>
                   <button
-                    onClick={() => { setExpandedProject(isExpanded ? null : site.name); setShowHidden(false); }}
+                    onClick={() => setExpandedProject(isExpanded ? null : site.name)}
                     style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 16, background: "none", border: "none", cursor: "pointer", textAlign: "left", flexWrap: "wrap" }}
                   >
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: DASH.ink }}>{site.name}</div>
@@ -5447,17 +5436,7 @@ function DepositStatusPage({ onBack }) {
 
                   {isExpanded && (
                     <div style={{ borderTop: `1px solid ${DASH.line}` }}>
-                      {visibleTypes.map((type) => (
-                        <DepositRow key={type} type={type} entry={siteEntries.find((e) => e.type === type)} onCommit={(t, patch) => commitField(site.name, t, patch)} />
-                      ))}
-                      {hiddenTypes.length > 0 && (
-                        <div style={{ padding: "10px 16px" }}>
-                          <button onClick={() => setShowHidden((v) => !v)} style={{ fontSize: 11.5, fontWeight: 600, color: DASH.inkFaint, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                            {showHidden ? "숨긴 항목 접기 ▲" : `숨긴 항목 보기 (${hiddenTypes.length}) ▼`}
-                          </button>
-                        </div>
-                      )}
-                      {showHidden && hiddenTypes.map((type) => (
+                      {DEPOSIT_TYPES.map((type) => (
                         <DepositRow key={type} type={type} entry={siteEntries.find((e) => e.type === type)} onCommit={(t, patch) => commitField(site.name, t, patch)} />
                       ))}
                     </div>
@@ -5698,7 +5677,6 @@ function DepositStatusMini({ projectName }) {
           return {
             type: props["구분"]?.select?.name || "",
             status: props["상태"]?.select?.name || "미입금",
-            hidden: !!props["숨김"]?.checkbox,
           };
         }));
       } catch (e) {
@@ -5711,7 +5689,7 @@ function DepositStatusMini({ projectName }) {
   }, [workerUrl, dbId, linkedPageId]);
 
   if (!projectName) return null;
-  const visible = DEPOSIT_TYPES.map((type) => entries.find((e) => e.type === type && !e.hidden)).filter(Boolean);
+  const visible = DEPOSIT_TYPES.map((type) => entries.find((e) => e.type === type)).filter(Boolean);
 
   return (
     <Card style={{ padding: 16 }}>
