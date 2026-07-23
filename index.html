@@ -5206,17 +5206,24 @@ function DepositRow({ type, entry, onCommit }) {
 
   const status = entry.status || "미입금";
   const isHidden = !!entry.hidden;
+  const dueDateParsed = parseYMD(dueDate);
+  const dueDateLabel = dueDateParsed
+    ? `${dueDateParsed.getFullYear()} / ${String(dueDateParsed.getMonth() + 1).padStart(2, "0")} / ${String(dueDateParsed.getDate()).padStart(2, "0")}`
+    : "미정";
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}`, opacity: isHidden ? 0.5 : 1, flexWrap: "wrap" }}>
       <div style={{ minWidth: 88, fontSize: 13, fontWeight: 700, color: DASH.navy }}>{type}</div>
       <div style={{ minWidth: 120, fontSize: 14, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{(Number(entry.amount) || 0).toLocaleString("ko-KR")}원</div>
-      <input
-        type="date"
-        value={dueDate}
-        onChange={(e) => { setDueDate(e.target.value); onCommit(type, { dueDate: e.target.value }); }}
-        style={{ ...stageInputStyle, width: 150 }}
-      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ fontSize: 10, color: DASH.inkFaint }}>입금예정일 : {dueDateLabel}</div>
+        <input
+          type="date"
+          value={dueDate}
+          onChange={(e) => { setDueDate(e.target.value); onCommit(type, { dueDate: e.target.value }); }}
+          style={{ ...stageInputStyle, width: 150 }}
+        />
+      </div>
       <span style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 100, background: status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: status === "입금완료" ? DASH.teal : DASH.red }}>{status}</span>
       {isHidden && (
         <span style={{ marginLeft: "auto", fontSize: 10.5, fontWeight: 600, color: DASH.inkFaint }}>노션에서 숨김 처리됨</span>
