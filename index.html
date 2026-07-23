@@ -5197,9 +5197,9 @@ function DepositRow({ type, entry }) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${DASH.line}`, flexWrap: "wrap" }}>
-      <div style={{ minWidth: 88, fontSize: 13, fontWeight: 700, color: DASH.navy }}>{type}</div>
-      <div style={{ minWidth: 120, fontSize: 14, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{(Number(entry.amount) || 0).toLocaleString("ko-KR")}원</div>
-      <div style={{ fontSize: 12, color: DASH.inkSoft }}>입금예정일 : {dueDateLabel}</div>
+      <div style={{ width: 88, flexShrink: 0, fontSize: 13, fontWeight: 700, color: DASH.navy }}>{type}</div>
+      <div style={{ width: 120, flexShrink: 0, textAlign: "right", fontSize: 14, fontWeight: 700, color: DASH.brass, fontFamily: "'Noto Serif KR', serif" }}>{(Number(entry.amount) || 0).toLocaleString("ko-KR")}원</div>
+      <div style={{ width: 170, flexShrink: 0, fontSize: 12, color: DASH.inkSoft }}>입금예정일 : {dueDateLabel}</div>
       <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 100, background: status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: status === "입금완료" ? DASH.teal : DASH.red }}>{status}</span>
     </div>
   );
