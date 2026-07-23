@@ -217,10 +217,11 @@ module Sufx
 
       model.start_operation('SUFX Convert', true)
       begin
+        front_normal = [face.normal.x, face.normal.y, face.normal.z]
         (0...@rows).each do |r|
           (0...@cols).each do |c|
-            cell_group = BodyBlock.build_cell_solid(model, @group, face, r, c, cell_w, cell_h)
-            BodyBlock.make_body_block(cell_group)
+            cell_group = BodyBlock.build_cell_body(model, @group, face, r, c, cell_w, cell_h)
+            BodyBlock.make_body_block(cell_group, front_normal: front_normal)
           end
         end
         @group.erase! unless @group.deleted?

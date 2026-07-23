@@ -94,21 +94,46 @@ module Sufx
       instance
     end
 
-    # Convert 격자의 셀 (row,col) 하나에 해당하는 솔리드를 만든다.
-    # face 평면에서 시작해 그룹의 반대쪽 경계까지 depth만큼 밀어넣는다.
-    def build_cell_solid(model, source_group, face, row, col, cell_w, cell_h)
+    # Convert 격자의 셀 (row,col) 하나에 해당하는 바디블럭 지오메트리를 만든다.
+    # 통짜 솔리드가 아니라, 선택한 면 쪽만 열려있는 5면 캐비닛 쉘(상/하/좌/우/뒷판)로 만든다
+    # — 실제 원본 툴의 "칸막이 박스" 형태를 재현한다.
+    def build_cell_body(model, source_group, face, row, col, cell_w, cell_h, panel_thk_mm: nil)
       depth = depth_along_normal(source_group.bounds, face.normal)
+      panel_thk = Units.mm_to_inch(panel_thk_mm || Constants::DEFAULT_PANEL_THK)
       corner = face.origin.offset(face.u_axis, col * cell_w).offset(face.v_axis, row * cell_h)
-      opposite_corner = corner
-        .offset(face.u_axis, cell_w)
-        .offset(face.v_axis, cell_h)
-        .offset(face.normal.reverse, depth)
 
-      create_box(model.active_entities, corner, opposite_corner)
+      # 패널 두께를 감당하기엔 셀/깊이가 너무 작으면 통짜 솔리드로 대체(안전장치).
+      if (panel_thk * 2) >= [cell_w, cell_h].min || panel_thk >= depth
+        opposite_corner = corner
+                           .offset(face.u_axis, cell_w)
+                           .offset(face.v_axis, cell_h)
+                           .offset(face.normal.reverse, depth)
+        return create_box(model.active_entities, corner, opposite_corner)
+      end
+
+      build_shell(model.active_entities, corner, face.u_axis, face.v_axis, face.normal.reverse,
+                  cell_w, cell_h, depth, panel_thk)
+    end
+
+    # corner를 기준점으로 u(폭)/v(높이)/n(깊이, 앞->뒤) 세 축 방향의 open-front 쉘 박스를 만든다.
+    # n=0(앞, corner가 놓인 면)에는 패널을 만들지 않아 그 방향이 뚫려 있다.
+    def build_shell(target_entities, corner, u, v, n, cell_w, cell_h, depth, panel_thk)
+      group = target_entities.add_group
+      entities = group.entities
+
+      far = corner.offset(u, cell_w).offset(v, cell_h).offset(n, depth)
+
+      fill_box_faces(entities, corner.offset(n, depth - panel_thk), far) # 뒷판
+      fill_box_faces(entities, corner, corner.offset(u, cell_w).offset(v, panel_thk).offset(n, depth)) # 하판
+      fill_box_faces(entities, corner.offset(v, cell_h - panel_thk), far) # 상판
+      fill_box_faces(entities, corner, corner.offset(u, panel_thk).offset(v, cell_h).offset(n, depth)) # 좌측판
+      fill_box_faces(entities, corner.offset(u, cell_w - panel_thk), far) # 우측판
+
+      group
     end
 
     # entity를 바디블럭 컴포넌트로 확정하고 이름/속성/태그를 세팅한다 (§4.1a).
-    def make_body_block(entity, origin_mass_dims: nil)
+    def make_body_block(entity, origin_mass_dims: nil, front_normal: nil)
       model = Sketchup.active_model
       comp = entity.is_a?(Sketchup::ComponentInstance) ? entity : entity.to_component
       comp.definition.name = Naming.next_name(Constants::NAME_BODY)
@@ -118,13 +143,15 @@ module Sufx
         'block_type' => 'body',
         'door_thk' => Constants::DEFAULT_DOOR_THK,
         'body_gap' => Constants::DEFAULT_BODY_GAP,
+        'panel_thk' => Constants::DEFAULT_PANEL_THK,
         'gap_top' => 0.0,
         'gap_bottom' => 0.0,
         'gap_left' => 0.0,
         'gap_right' => 0.0,
         'channel_mode' => 0,
         'group_id' => new_guid,
-        'origin_mass_dims' => dims)
+        'origin_mass_dims' => dims,
+        'front_normal' => front_normal || [0.0, -1.0, 0.0])
       TagManager.assign(model, comp, Constants::TAG_BODY)
       comp
     end
