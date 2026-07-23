@@ -39,29 +39,15 @@ module Sufx
       @candidate_faces = BodyBlock.collect_outer_faces(@group)
       @door_thk_mm = door_thk_mm || Constants::DEFAULT_DOOR_THK
       @body_gap_mm = body_gap_mm || Constants::DEFAULT_BODY_GAP
-      @label_group = nil
-      @operation_open = false
     end
 
-    # activate ~ (commit_grid! 또는 deactivate) 사이를 하나의 오퍼레이션으로 묶어서 연다.
-    # 치수 라벨을 view.draw_text(신뢰도 낮음) 대신 실제 3D 텍스트 지오메트리(add_3d_text)로
-    # 만들기 때문에, 격자를 조정할 때마다 생기는 "미리보기 편집"이 Undo 스택을 어지럽히지
-    # 않도록 전체를 한 오퍼레이션으로 감싸고 취소 시 통째로 abort한다.
     def activate
       Sketchup.status_text = '방향키: 행/열 조정 · Tab: 기준면 전환 · Enter: 확정 · Esc: 취소'
-      model = Sketchup.active_model
-      model.start_operation('SUFX Convert', true)
-      @operation_open = true
-      rebuild_preview_labels!
-      model.active_view.invalidate
+      Sketchup.active_model.active_view.invalidate
       push_dimensions_to_panel
     end
 
     def deactivate(view)
-      if @operation_open
-        Sketchup.active_model.abort_operation
-        @operation_open = false
-      end
       view.invalidate
       push_dimensions_to_panel(clear: true)
     end
@@ -91,7 +77,6 @@ module Sufx
         commit_grid!
         return false
       end
-      rebuild_preview_labels!
       push_dimensions_to_panel
       view.invalidate
       true
@@ -99,6 +84,8 @@ module Sufx
 
     TINT_COLOR = Sketchup::Color.new(70, 200, 120, 70).freeze
     GRID_LINE_COLOR = Sketchup::Color.new(0, 190, 210).freeze
+    LABEL_H_COLOR = 'red'.freeze  # 열(가로 폭) 라벨
+    LABEL_V_COLOR = 'blue'.freeze # 행(세로 높이) 라벨
 
     def draw(view)
       return if @group.deleted?
@@ -113,6 +100,7 @@ module Sufx
 
       draw_face_tint(view, face)
       draw_grid_lines(view, face, cell_w, cell_h)
+      draw_dimension_labels(view, face, cell_w, cell_h)
     end
 
     private
@@ -148,6 +136,40 @@ module Sufx
       end
     end
 
+    # 상단 바깥쪽에 열(칸) 폭 치수(빨강), 우측 바깥쪽에 행 높이 치수(파랑)를 2D 텍스트로 그린다.
+    # 배경 pill 없이 색상만으로 구분한다 — 예전에 배경 pill을 같이 그렸을 때 텍스트가 안
+    # 보이던 문제가 있어(배경이 텍스트를 덮는 렌더링 순서 문제로 추정) 배경을 아예 뺐다.
+    def draw_dimension_labels(view, face, cell_w, cell_h)
+      origin = face.origin.offset(lift_vector(face, GRID_OFFSET_MM))
+
+      top_offset = face.v_axis.clone
+      top_offset.length = [cell_h.to_f * 0.06, 0.3].max
+      (0...@cols).each do |c|
+        point = origin
+                .offset(face.u_axis, (c + 0.5) * cell_w)
+                .offset(face.v_axis, face.height)
+                .offset(top_offset)
+        draw_label_text(view, point, format('%.0f', Units.inch_to_mm(cell_w)), LABEL_H_COLOR)
+      end
+
+      right_offset = face.u_axis.clone
+      right_offset.length = [cell_w.to_f * 0.06, 0.3].max
+      (0...@rows).each do |r|
+        point = origin
+                .offset(face.v_axis, (r + 0.5) * cell_h)
+                .offset(face.u_axis, face.width)
+                .offset(right_offset)
+        draw_label_text(view, point, format('%.0f', Units.inch_to_mm(cell_h)), LABEL_V_COLOR)
+      end
+    end
+
+    def draw_label_text(view, point, text, color)
+      view.drawing_color = color
+      view.draw_text(point, text)
+    rescue StandardError => e
+      warn "[SUFX] draw_text 실패: #{e.message}"
+    end
+
     # face.normal 방향으로 mm만큼 띄운 벡터를 만든다(z-fighting 방지용 공용 헬퍼).
     def lift_vector(face, mm)
       v = face.normal.clone
@@ -155,11 +177,7 @@ module Sufx
       v
     end
 
-    # 화면 고정 위치(스크린 좌표)에 항상 보이는 안내 문구를 그려본다.
-    # NOTE: view.draw_text는 SketchUp 빌드에 따라 렌더링되지 않을 수 있어(치수 라벨이
-    # 안 보이던 원인) "되면 좋고" 수준으로만 남겨둔다. 실제 치수는 아래
-    # rebuild_preview_labels!가 만드는 진짜 3D 지오메트리로 표시한다 — 이 방식은
-    # add_3d_text로 실제 모델 지오메트리(면)를 생성하므로 SketchUp이 항상 그려준다.
+    # 화면 고정 위치(스크린 좌표)에 항상 보이는 안내 문구를 그린다.
     def draw_hud(view)
       text = "SUFX Convert · #{@rows} x #{@cols}칸 · 방향키:행/열 · Tab:기준면 · Enter:확정 · Esc:취소"
       view.drawing_color = 'red'
@@ -168,63 +186,7 @@ module Sufx
       nil
     end
 
-    # 이전 미리보기 라벨을 지우고, 각 열 폭/행 높이를 실제 3D 텍스트 지오메트리로 다시 만든다.
-    # (view.draw_text 대신 Entities#add_3d_text로 진짜 면을 만들기 때문에 렌더링이 항상 보장된다.)
-    # activate에서 연 오퍼레이션이 아직 열려 있는 동안에만 호출되므로, Undo 스택에는
-    # Convert 하나의 스텝으로만 남는다(Esc 시 abort, Enter 시 최종 지오메트리와 함께 commit).
-    def rebuild_preview_labels!
-      model = Sketchup.active_model
-      @label_group.erase! if @label_group && !@label_group.deleted?
-      @label_group = nil
-      return if @cols <= 0 || @rows <= 0
-
-      face = current_face
-      cell_w = face.width / @cols
-      cell_h = face.height / @rows
-      origin = face.origin.offset(lift_vector(face, GRID_OFFSET_MM))
-      letter_height = clamp_letter_height(cell_w, cell_h)
-
-      @label_group = model.active_entities.add_group
-      entities = @label_group.entities
-
-      top_offset = face.v_axis.clone
-      top_offset.length = letter_height * 1.3
-      (0...@cols).each do |c|
-        point = origin
-                .offset(face.u_axis, (c + 0.5) * cell_w)
-                .offset(face.v_axis, face.height)
-                .offset(top_offset)
-        add_label(entities, format('%.0f', Units.inch_to_mm(cell_w)), point, face, letter_height)
-      end
-
-      right_offset = face.u_axis.clone
-      right_offset.length = letter_height * 1.3
-      (0...@rows).each do |r|
-        point = origin
-                .offset(face.v_axis, (r + 0.5) * cell_h)
-                .offset(face.u_axis, face.width)
-                .offset(right_offset)
-        add_label(entities, format('%.0f', Units.inch_to_mm(cell_h)), point, face, letter_height)
-      end
-    rescue StandardError => e
-      warn "[SUFX] rebuild_preview_labels! 실패: #{e.message}"
-    end
-
-    def clamp_letter_height(cell_w, cell_h)
-      base = [cell_w, cell_h].min * 0.15
-      [[base, Units.mm_to_inch(15)].max, Units.mm_to_inch(60)].min
-    end
-
-    # entities 안에 point를 기준으로 face 평면에 눕힌 3D 텍스트를 만든다.
-    def add_label(entities, text, point, face, letter_height)
-      align = defined?(TextAlignCenter) ? TextAlignCenter : 1
-      text_group = entities.add_3d_text(text, align, 'Arial', false, false, letter_height, 0.0, true, 0, true)
-      text_group.transformation = Geom::Transformation.new(point, face.u_axis, face.v_axis)
-    rescue StandardError => e
-      warn "[SUFX] add_label 실패: #{e.message}"
-    end
-
-    # 현재 셀 치수를 SUFX Tools 패널의 HTML 텍스트로도 밀어넣는다(3D 라벨과 별개의 보조 표시).
+    # 현재 셀 치수를 SUFX Tools 패널의 HTML 텍스트로도 밀어넣는다(3D 뷰 라벨과 별개의 보조 표시).
     def push_dimensions_to_panel(clear: false)
       dialog = Sufx::UIPanel.dialog
       return unless dialog && dialog.visible?
@@ -255,10 +217,8 @@ module Sufx
       cell_h = face.height / @rows
       model = Sketchup.active_model
 
+      model.start_operation('SUFX Convert', true)
       begin
-        @label_group.erase! if @label_group && !@label_group.deleted?
-        @label_group = nil
-
         front_normal = [face.normal.x, face.normal.y, face.normal.z]
         setback_mm = @door_thk_mm + @body_gap_mm
         (0...@rows).each do |r|
@@ -271,10 +231,8 @@ module Sufx
         end
         @group.erase! unless @group.deleted?
         model.commit_operation
-        @operation_open = false
       rescue StandardError => e
         model.abort_operation
-        @operation_open = false
         UI.messagebox("SUFX Convert 실패: #{e.message}")
       end
 
