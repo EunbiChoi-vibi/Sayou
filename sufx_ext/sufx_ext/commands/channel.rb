@@ -1,10 +1,12 @@
 module Sufx
   module Commands
     # §4.7 Channel(챗넬) — 하부장 바디 전용, 0(없음)/1(상챗넬)/2(상+중챗넬).
-    # 정밀 boolean 절삭 대신, 홈 위치를 나타내는 보조 지오메트리를 바디 정의 내부에 만들고
-    # SUFX_CHANNEL 태그(§3.3)로 표시한다 — 실제 절삭 형상은 실측 후 고도화 대상.
-    # (이전에는 이 보조 지오메트리를 SUFX_HIDDEN 태그 + hidden=true로 만들어서 아예 안 보였다
-    # — "챗넬이 생성되지 않는다"는 문제의 원인. 이제는 눈에 보이도록 만든다.)
+    # 본체 내부를 가로지르는 얇은 가로 레일(서랍 레일 느낌) 부재로 구현한다.
+    #   CH1(상챗넬): 상판 바로 아래에 레일 1개
+    #   CH2(상+중챗넬): CH1 레일 + 본체 세로 중앙에 레일 1개 추가
+    # 각 레일은 폭 전체를 채우되, 깊이는 뒤쪽에서 CHANNEL_RAIL_DEPTH만큼만(서랍 레일처럼 좁게).
+    # 정밀 boolean 절삭이 아니라 실제 지오메트리(솔리드 레일)를 삽입하는 방식이며,
+    # SUFX_CHANNEL 태그로 표시해 구분한다.
     # create_drawer(commands/door_create.rb의 :drawer 타입)는 channel_mode를 조회해
     # CHANNEL_CLEARANCE만큼 서랍 상단 높이를 축소한다 — 서랍 연동 요구사항(§4.7) 충족.
     module Channel
@@ -38,8 +40,8 @@ module Sufx
         rebuild_channel_geometry(model, body, mode)
       end
 
-      # 방향: front_normal(§core/body_block.rb#axis_frame)을 기준으로 "뒤쪽 상단"에
-      # 홈을 배치한다 — Convert에서 어떤 면을 선택해 만든 바디든 동일하게 동작한다.
+      # 방향: front_normal(§core/body_block.rb#axis_frame)을 기준으로 배치한다 — Convert에서
+      # 어떤 면을 선택해 만든 바디든 동일하게 동작한다.
       def rebuild_channel_geometry(model, body, mode)
         body.make_unique if body.respond_to?(:make_unique)
         definition = body.definition
@@ -48,28 +50,42 @@ module Sufx
         end
         return if mode.to_i.zero?
 
-        clearance = Units.mm_to_inch(Constants::CHANNEL_CLEARANCE[mode] || 0)
-        return if clearance <= 0
-
         front_normal_arr = Attrs.get(body, 'front_normal', [0.0, -1.0, 0.0])
         frame = BodyBlock.axis_frame(Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2]))
 
         bounds = body.bounds
         u_min, u_max = BodyBlock.axis_range(bounds, frame[:u_sym])
-        _v_min, v_max = BodyBlock.axis_range(bounds, frame[:v_sym])
+        v_min, v_max = BodyBlock.axis_range(bounds, frame[:v_sym])
         depth_min, depth_max = BodyBlock.axis_range(bounds, frame[:depth_axis])
 
-        groove_depth = Units.mm_to_inch(10.0) # 홈 깊이 placeholder(실측 필요)
+        panel_thk = Units.mm_to_inch(Attrs.get(body, 'panel_thk', Constants::DEFAULT_PANEL_THK).to_f)
+        rail_thk = Units.mm_to_inch(Constants::CHANNEL_RAIL_THK)
+        rail_depth = Units.mm_to_inch(Constants::CHANNEL_RAIL_DEPTH)
+
         back_val = frame[:depth_sign].positive? ? depth_min : depth_max
-        groove_far_val = back_val + (frame[:depth_sign] * groove_depth)
+        rail_front_val = back_val + (frame[:depth_sign] * rail_depth) # 뒤에서 앞으로 rail_depth만큼만
 
-        p0 = BodyBlock.point_on_frame(frame, back_val, u_min, v_max - clearance)
-        p1 = BodyBlock.point_on_frame(frame, groove_far_val, u_max, v_max)
+        # CH1: 상판 바로 아래
+        top_hi = v_max - panel_thk
+        top_lo = top_hi - rail_thk
+        add_rail(model, definition.entities, frame, back_val, rail_front_val, u_min, u_max, top_lo, top_hi)
 
-        groove = BodyBlock.create_box(definition.entities, p0, p1)
-        Attrs.set(groove, 'channel_groove', true)
-        groove.material = GROOVE_COLOR
-        TagManager.assign(model, groove, Constants::TAG_CHANNEL)
+        # CH2: CH1 + 본체 세로 중앙에 레일 하나 더
+        return unless mode.to_i >= 2
+
+        mid = (v_min + v_max) / 2.0
+        add_rail(model, definition.entities, frame, back_val, rail_front_val, u_min, u_max,
+                 mid - (rail_thk / 2.0), mid + (rail_thk / 2.0))
+      end
+
+      def add_rail(model, entities, frame, depth_a, depth_b, u_a, u_b, v_a, v_b)
+        p0 = BodyBlock.point_on_frame(frame, depth_a, u_a, v_a)
+        p1 = BodyBlock.point_on_frame(frame, depth_b, u_b, v_b)
+        rail = BodyBlock.create_box(entities, p0, p1)
+        Attrs.set(rail, 'channel_groove', true)
+        rail.material = GROOVE_COLOR
+        TagManager.assign(model, rail, Constants::TAG_CHANNEL)
+        rail
       end
     end
   end
