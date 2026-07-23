@@ -17,7 +17,7 @@ module Sufx
         begin
           doors.each do |door|
             if direction == :reset
-              %w[gap_top gap_bottom gap_left gap_right].each { |k| Attrs.set(door, k, 0.0) }
+              %w[gap_top gap_bottom gap_left gap_right].each { |k| Attrs.set(door, k, Constants::DEFAULT_DOOR_GAP) }
             elsif direction == :all
               DIRECTIONS.each { |d| bump_gap(door, d, mm) }
             else
@@ -34,10 +34,31 @@ module Sufx
         true
       end
 
+      # 패널의 개별 방향 입력창(절대값 mm)에서 호출 — 해당 방향 갭을 지정한 값으로 직접 설정한다.
+      def set!(selection, direction, mm)
+        doors = selection.select { |e| Attrs.block_type(e) == 'door' }
+        return false if doors.empty?
+
+        model = Sketchup.active_model
+        model.start_operation('SUFX Door Gap', true)
+        begin
+          doors.each do |door|
+            Attrs.set(door, "gap_#{direction}", [mm.to_f, 0.0].max)
+            rebuild_door_geometry(door)
+          end
+          model.commit_operation
+        rescue StandardError => e
+          model.abort_operation
+          UI.messagebox("SUFX Door Gap 실패: #{e.message}")
+          return false
+        end
+        true
+      end
+
       def bump_gap(door, side, mm)
         key = "gap_#{side}"
         current = Attrs.get(door, key, 0.0).to_f
-        Attrs.set(door, key, current + mm)
+        Attrs.set(door, key, [current + mm, 0.0].max)
       end
 
       def rebuild_door_geometry(door)

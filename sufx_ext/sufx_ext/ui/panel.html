@@ -46,22 +46,36 @@
 
     <hr>
 
-    <section class="section-title">DOOR GAP</section>
-    <div id="door-gap-status" class="status-text">No door selected</div>
-    <div class="gap-pad">
-      <button class="btn gap-btn gap-up" data-dir="top">▲</button>
-      <div class="gap-mid">
-        <button class="btn gap-btn" data-dir="left">◀</button>
-        <button class="btn gap-btn gap-reset" data-dir="reset">R</button>
-        <button class="btn gap-btn" data-dir="right">▶</button>
-      </div>
-      <button class="btn gap-btn gap-down" data-dir="bottom">▼</button>
-    </div>
-    <section class="row">
-      <label>STEP(mm)</label>
-      <input id="input-gap-step" type="number" value="1.0" step="0.5" class="input-mm">
-      <button id="gap-all" class="btn" data-dir="all">전체(All)</button>
+    <section class="door-gap-title-row">
+      <span class="section-title">DOOR GAP</span>
+      <span id="door-gap-name" class="door-gap-name"></span>
     </section>
+    <div id="door-gap-status" class="status-text">No door selected</div>
+    <div class="gap-cross">
+      <div class="gap-slot gap-slot-top">
+        <span class="gap-icon">▲</span>
+        <input type="number" id="gap-top-input" class="input-gap-num" value="2" step="1">
+      </div>
+      <div class="gap-slot gap-slot-left">
+        <span class="gap-icon">◀</span>
+        <input type="number" id="gap-left-input" class="input-gap-num" value="2" step="1">
+      </div>
+      <div class="gap-slot gap-slot-center">
+        <button id="gap-reset" class="btn gap-reset-btn" data-dir="reset" title="기본값(2mm)으로 리셋">R</button>
+        <div class="gap-all-stepper" title="전체 방향 갭 조정">
+          <button class="gap-all-btn" data-delta="1">▲</button>
+          <button class="gap-all-btn" data-delta="-1">▼</button>
+        </div>
+      </div>
+      <div class="gap-slot gap-slot-right">
+        <input type="number" id="gap-right-input" class="input-gap-num" value="2" step="1">
+        <span class="gap-icon">▶</span>
+      </div>
+      <div class="gap-slot gap-slot-bottom">
+        <input type="number" id="gap-bottom-input" class="input-gap-num" value="2" step="1">
+        <span class="gap-icon">▼</span>
+      </div>
+    </div>
 
     <hr>
 

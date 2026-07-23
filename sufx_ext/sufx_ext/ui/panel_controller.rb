@@ -74,6 +74,14 @@ module Sufx
       dialog.add_action_callback('onDoorGapClick') do |_ctx, dir, mm|
         selection = Sketchup.active_model.selection.to_a
         Commands::DoorGap.run!(selection, dir.to_sym, mm.to_f)
+        push_current_selection_state
+      end
+
+      # 방향별 입력창(절대값 mm)에서 호출 — 누적(bump)이 아니라 지정한 값으로 그 방향 갭을 직접 설정.
+      dialog.add_action_callback('onDoorGapSetClick') do |_ctx, dir, mm|
+        selection = Sketchup.active_model.selection.to_a
+        Commands::DoorGap.set!(selection, dir.to_sym, mm.to_f)
+        push_current_selection_state
       end
 
       dialog.add_action_callback('onChannelClick') do |_ctx, mode|
@@ -97,11 +105,30 @@ module Sufx
     end
 
     # SufxSelectionObserver에서 호출 — 선택 변경 시 패널 상태를 갱신한다 (§5.3).
-    def push_selection_state(door_selected, body_name)
+    # door/body는 Sketchup::ComponentInstance 또는 nil.
+    def push_selection_state(door, body)
       return unless @dialog && @dialog.visible?
 
-      @dialog.execute_script("updateDoorGapPanel(#{door_selected ? 'true' : 'false'})")
-      @dialog.execute_script("updateChannelPanel(#{(body_name ? body_name : nil).to_json})")
+      door_payload =
+        if door
+          {
+            name: door.definition.name,
+            top: Attrs.get(door, 'gap_top', Constants::DEFAULT_DOOR_GAP).to_f,
+            bottom: Attrs.get(door, 'gap_bottom', Constants::DEFAULT_DOOR_GAP).to_f,
+            left: Attrs.get(door, 'gap_left', Constants::DEFAULT_DOOR_GAP).to_f,
+            right: Attrs.get(door, 'gap_right', Constants::DEFAULT_DOOR_GAP).to_f
+          }
+        end
+      @dialog.execute_script("updateDoorGapPanel(#{door_payload.to_json})")
+      @dialog.execute_script("updateChannelPanel(#{(body ? body.definition.name : nil).to_json})")
+    end
+
+    # Door Gap 버튼/입력 조작 직후, 방금 그 값이 실제로 반영됐는지 패널 입력창에도 바로 반영한다.
+    def push_current_selection_state
+      selection = Sketchup.active_model.selection.to_a
+      door = selection.find { |e| Attrs.block_type(e) == 'door' }
+      body = selection.find { |e| Attrs.block_type(e) == 'body' }
+      push_selection_state(door, body)
     end
   end
 
@@ -125,7 +152,7 @@ module Sufx
     def notify(selection)
       door = selection.find { |e| Sufx::Attrs.block_type(e) == 'door' }
       body = selection.find { |e| Sufx::Attrs.block_type(e) == 'body' }
-      @panel.push_selection_state(!door.nil?, body ? body.definition.name : nil)
+      @panel.push_selection_state(door, body)
     end
   end
 end

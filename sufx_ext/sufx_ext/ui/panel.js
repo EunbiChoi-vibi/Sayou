@@ -53,13 +53,23 @@
     callRuby('onBodyGapChanged', parseFloat(e.target.value) || 0);
   });
 
-  document.querySelectorAll('.gap-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      callRuby('onDoorGapClick', btn.dataset.dir, num('input-gap-step', 1));
+  // 방향 아이콘(▲◀▶▼)은 클릭 동작이 없는 순수 표시용이다 — 실제 조정은 옆의 숫자 입력으로 한다.
+  ['top', 'bottom', 'left', 'right'].forEach(function (dir) {
+    var input = document.getElementById('gap-' + dir + '-input');
+    input.addEventListener('change', function () {
+      callRuby('onDoorGapSetClick', dir, num('gap-' + dir + '-input', 0));
     });
   });
-  document.getElementById('gap-all').addEventListener('click', function () {
-    callRuby('onDoorGapClick', 'all', num('input-gap-step', 1));
+
+  document.getElementById('gap-reset').addEventListener('click', function () {
+    callRuby('onDoorGapClick', 'reset', 0);
+  });
+
+  // R 옆의 스테퍼 — 전체 4방향을 한 번에 1mm씩 조정(All 역할).
+  document.querySelectorAll('.gap-all-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      callRuby('onDoorGapClick', 'all', parseFloat(btn.dataset.delta));
+    });
   });
 
   document.querySelectorAll('.channel-btn').forEach(function (btn) {
@@ -69,10 +79,24 @@
   });
 
   // Ruby -> JS 상태 갱신 (§5.3). Ruby 쪽에서 dialog.execute_script로 직접 호출한다.
-  window.updateDoorGapPanel = function (hasDoor) {
-    var el = document.getElementById('door-gap-status');
-    el.textContent = hasDoor ? '' : 'No door selected';
-    el.style.display = hasDoor ? 'none' : 'block';
+  // payload: {name, top, bottom, left, right} 또는 도어 미선택 시 null.
+  window.updateDoorGapPanel = function (payload) {
+    var statusEl = document.getElementById('door-gap-status');
+    var nameEl = document.getElementById('door-gap-name');
+    var hasDoor = !!payload;
+
+    statusEl.textContent = hasDoor ? '' : 'No door selected';
+    statusEl.style.display = hasDoor ? 'none' : 'block';
+    nameEl.textContent = hasDoor ? payload.name : '';
+
+    if (hasDoor) {
+      ['top', 'bottom', 'left', 'right'].forEach(function (dir) {
+        var input = document.getElementById('gap-' + dir + '-input');
+        if (document.activeElement !== input && typeof payload[dir] === 'number') {
+          input.value = payload[dir];
+        }
+      });
+    }
   };
 
   window.updateChannelPanel = function (bodyName) {

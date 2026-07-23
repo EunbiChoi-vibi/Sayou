@@ -2,7 +2,8 @@ module Sufx
   module Constants
     DEFAULT_DOOR_THK      = 18.0  # mm
     DEFAULT_BODY_GAP      = 4.0   # mm
-    DEFAULT_DOOR_GAP_STEP = 1.0   # mm, 버튼 1클릭당 증가량
+    DEFAULT_DOOR_GAP      = 2.0   # mm, 도어 생성 시 4방향 기본 갭(Reset 시에도 이 값으로 돌아감)
+    DEFAULT_DOOR_GAP_STEP = 1.0   # mm, All 스테퍼 1클릭당 증가량
     MIN_CELL_SIZE         = 10.0  # mm, 하한 clamp
     DEFAULT_PANEL_THK      = 18.0 # mm, 바디블럭 측판/상판/하판 두께
     DEFAULT_BACK_PANEL_THK = 5.0  # mm, 바디블럭 뒷판 두께(측판보다 얇은 게 일반적)

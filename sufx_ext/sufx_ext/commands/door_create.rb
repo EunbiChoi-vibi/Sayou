@@ -46,7 +46,6 @@ module Sufx
         begin
           door_comps = build_doors(model, combined, door_type, door_thk_mm, door_thk_inch,
                                     body_gap_mm, body_gap_inch, gaps, channel_mode, first_body)
-          build_doorline(model, door_comps)
 
           model.commit_operation
           model.selection.clear
@@ -96,15 +95,18 @@ module Sufx
                          'door_type' => door_type.to_s,
                          'door_thk' => door_thk_mm,
                          'body_gap' => body_gap_mm,
-                         'gap_top' => 0.0,
-                         'gap_bottom' => 0.0,
-                         'gap_left' => 0.0,
-                         'gap_right' => 0.0,
+                         'gap_top' => Constants::DEFAULT_DOOR_GAP,
+                         'gap_bottom' => Constants::DEFAULT_DOOR_GAP,
+                         'gap_left' => Constants::DEFAULT_DOOR_GAP,
+                         'gap_right' => Constants::DEFAULT_DOOR_GAP,
                          'front_normal' => front_normal_arr,
                          'parent_body_id' => (Attrs.get(first_body, 'group_id') || first_body.guid).to_s,
                          'origin_door_bounds' => [origin_p0.x, origin_p0.y, origin_p0.z,
                                                    origin_p1.x, origin_p1.y, origin_p1.z])
           TagManager.assign(model, comp, "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOOR}")
+          # origin_door_bounds는 "갭 0" 기준 전체 개구부다. gap_*를 기본값(2mm)으로 채웠으니
+          # 그 갭이 실제 지오메트리에도 바로 반영되도록 DoorGap의 재생성 로직을 그대로 재사용한다.
+          DoorGap.rebuild_door_geometry(comp)
           comp
         end
       end
@@ -117,37 +119,6 @@ module Sufx
           [[u0, v0, mid_u, v1], [mid_u, v0, u1, v1]]
         else
           [[u0, v0, u1, v1]]
-        end
-      end
-
-      # 도어 윤곽/줄눈선(§3.3 SUFX_DOORLINE) — 도어 바깥쪽(시야 방향) 면에 inset된 사각 엣지 루프.
-      def build_doorline(model, door_comps, inset_mm: 2.0)
-        inset = Units.mm_to_inch(inset_mm)
-        door_comps.each do |door|
-          front_normal_arr = Attrs.get(door, 'front_normal', [0.0, -1.0, 0.0])
-          frame = BodyBlock.axis_frame(Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2]))
-          bounds = door.bounds
-
-          depth_min, depth_max = BodyBlock.axis_range(bounds, frame[:depth_axis])
-          outer_val = frame[:depth_sign].positive? ? depth_max : depth_min
-
-          u_min, u_max = BodyBlock.axis_range(bounds, frame[:u_sym])
-          v_min, v_max = BodyBlock.axis_range(bounds, frame[:v_sym])
-          u0 = u_min + inset
-          u1 = u_max - inset
-          v0 = v_min + inset
-          v1 = v_max - inset
-          next if u1 <= u0 || v1 <= v0
-
-          group = model.active_entities.add_group
-          pts = [
-            BodyBlock.point_on_frame(frame, outer_val, u0, v0),
-            BodyBlock.point_on_frame(frame, outer_val, u1, v0),
-            BodyBlock.point_on_frame(frame, outer_val, u1, v1),
-            BodyBlock.point_on_frame(frame, outer_val, u0, v1)
-          ]
-          group.entities.add_edges(pts + [pts.first])
-          TagManager.assign(model, group, "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOORLINE}")
         end
       end
     end
