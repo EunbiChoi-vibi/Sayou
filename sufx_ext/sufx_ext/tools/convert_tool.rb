@@ -74,6 +74,8 @@ module Sufx
     def draw(view)
       return if @group.deleted?
 
+      draw_hud(view)
+
       face = current_face
       return if @cols <= 0 || @rows <= 0
 
@@ -107,6 +109,16 @@ module Sufx
     end
 
     private
+
+    # 화면 고정 위치(스크린 좌표)에 항상 보이는 안내 문구를 그린다.
+    # 카메라 각도/거리와 무관하게 "Convert 모드가 켜졌다"는 것을 즉시 확인할 수 있게 하기 위함.
+    def draw_hud(view)
+      text = "SUFX Convert · #{@rows} x #{@cols}칸 · 방향키:행/열 · Tab:기준면 · Enter:확정 · Esc:취소"
+      view.drawing_color = 'red'
+      view.draw_text([12, 12], text)
+    rescue StandardError
+      nil # 일부 SketchUp 버전에서 화면좌표 draw_text 미지원 시 조용히 무시
+    end
 
     def current_face
       @candidate_faces[@base_face_index]

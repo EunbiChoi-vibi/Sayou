@@ -15,7 +15,10 @@ module Sufx
     module_function
 
     def tags_collection(model)
-      model.respond_to?(:tags) ? model.tags : model.layers
+      # NOTE: 최신 SketchUp에는 Sketchup::Model#tags 라는 "모델 메타데이터(검색 키워드) 문자열"
+      # 프로퍼티가 별도로 존재해서, respond_to?(:tags)만으로 분기하면 그 문자열과 충돌한다
+      # (String에 .add를 호출하다 크래시). 레이어/태그 컬렉션은 항상 model.layers로 접근한다.
+      model.layers
     end
 
     def find_folder(model, name)
@@ -74,11 +77,15 @@ module Sufx
     end
 
     # entity에 태그를 할당한다. path는 "SUFX_BODY" 또는 "DOOR/SUFX_DOOR" 형태(마지막 세그먼트만 사용).
+    # 태깅은 부가 기능이므로, 실패하더라도 지오메트리 생성(Convert/Merge/... ) 자체는
+    # 막지 않도록 예외를 삼킨다.
     def assign(model, entity, path)
       ensure_tree(model)
       tag_name = path.to_s.split('/').last
       tag = tags_collection(model)[tag_name] || ensure_tag(model, tag_name)
-      entity.layer = tag
+      entity.layer = tag if tag
+    rescue StandardError => e
+      warn "[SUFX] TagManager.assign failed for #{path}: #{e.message}"
     end
   end
 end
