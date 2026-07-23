@@ -23,7 +23,7 @@ module Sufx
         begin
           count.times do |i|
             sub_min, sub_max = slice_segment(bounds, axis, i, count)
-            group = BodyBlock.create_box(model.active_entities, sub_min, sub_max)
+            group = build_divided_group(model, body, sub_min, sub_max)
             comp = group.to_component
             comp.definition.name = Naming.next_name(Constants::NAME_BODY)
             Attrs.copy(body, comp)
@@ -38,6 +38,17 @@ module Sufx
           return false
         end
         true
+      end
+
+      # Divide로 나뉜 조각도 통짜 솔리드가 아니라 원래 바디의 쉘 구조(측/뒷/상/하판, front_normal)를
+      # 그대로 유지한 채 새 바운딩박스로 재생성한다.
+      def build_divided_group(model, reference, sub_min, sub_max)
+        front_normal_arr = Attrs.get(reference, 'front_normal', [0.0, -1.0, 0.0])
+        front_normal = Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2])
+        panel_thk = Units.mm_to_inch(Attrs.get(reference, 'panel_thk', Constants::DEFAULT_PANEL_THK).to_f)
+        back_thk = Units.mm_to_inch(Attrs.get(reference, 'back_panel_thk', Constants::DEFAULT_BACK_PANEL_THK).to_f)
+
+        BodyBlock.build_shell_from_bounds(model.active_entities, sub_min, sub_max, front_normal, panel_thk, back_thk)
       end
 
       def slice_segment(bounds, axis, index, count)
