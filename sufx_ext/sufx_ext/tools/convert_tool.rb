@@ -1,3 +1,5 @@
+require 'json'
+
 module Sufx
   # Convert 버튼의 인터랙티브 격자 변환 툴 (§4.1).
   # 방향키로 행/열 조정, Tab으로 기준면 전환, Enter로 확정, Esc로 취소.
@@ -42,14 +44,17 @@ module Sufx
     def activate
       Sketchup.status_text = '방향키: 행/열 조정 · Tab: 기준면 전환 · Enter: 확정 · Esc: 취소'
       Sketchup.active_model.active_view.invalidate
+      push_dimensions_to_panel
     end
 
     def deactivate(view)
       view.invalidate
+      push_dimensions_to_panel(clear: true)
     end
 
     def resume(_view)
       Sketchup.status_text = '방향키: 행/열 조정 · Tab: 기준면 전환 · Enter: 확정 · Esc: 취소'
+      push_dimensions_to_panel
     end
 
     def onCancel(_reason, _view)
@@ -72,14 +77,13 @@ module Sufx
         commit_grid!
         return false
       end
+      push_dimensions_to_panel
       view.invalidate
       true
     end
 
     TINT_COLOR = Sketchup::Color.new(70, 200, 120, 70).freeze
     GRID_LINE_COLOR = Sketchup::Color.new(0, 190, 210).freeze
-    LABEL_H_COLOR = Sketchup::Color.new(225, 35, 130).freeze # 열(가로 폭) 라벨 — 분홍
-    LABEL_V_COLOR = Sketchup::Color.new(35, 170, 90).freeze  # 행(세로 높이) 라벨 — 초록
 
     def draw(view)
       return if @group.deleted?
@@ -94,7 +98,6 @@ module Sufx
 
       draw_face_tint(view, face)
       draw_grid_lines(view, face, cell_w, cell_h)
-      draw_dimension_labels(view, face, cell_w, cell_h)
     end
 
     private
@@ -137,80 +140,39 @@ module Sufx
       v
     end
 
-    # 상단 바깥쪽에 열(칸) 폭 라벨(분홍 pill), 우측 바깥쪽에 행 높이 라벨(초록 pill)을 그린다.
-    def draw_dimension_labels(view, face, cell_w, cell_h)
-      origin = face.origin.offset(lift_vector(face, GRID_OFFSET_MM))
-
-      top_offset = face.v_axis.clone
-      top_offset.length = [cell_h.to_f * 0.06, 0.3].max
-      (0...@cols).each do |c|
-        point = origin
-                .offset(face.u_axis, (c + 0.5) * cell_w)
-                .offset(face.v_axis, face.height)
-                .offset(top_offset)
-        draw_pill_label(view, point, format('%.0f', Units.inch_to_mm(cell_w)), LABEL_H_COLOR)
-      end
-
-      right_offset = face.u_axis.clone
-      right_offset.length = [cell_w.to_f * 0.06, 0.3].max
-      (0...@rows).each do |r|
-        point = origin
-                .offset(face.v_axis, (r + 0.5) * cell_h)
-                .offset(face.u_axis, face.width)
-                .offset(right_offset)
-        draw_pill_label(view, point, format('%.0f', Units.inch_to_mm(cell_h)), LABEL_V_COLOR)
-      end
-    end
-
-    # point(3D)를 화면에 투영해 그 자리에 배경색 pill + 흰 텍스트를 그린다.
-    # 텍스트 폭 측정 API가 없어 글자수 기반으로 배경 크기를 근사한다.
-    def draw_pill_label(view, point, text, bg_color)
-      draw_pill_background(view, point, text, bg_color)
-      draw_pill_text(view, point, text)
-    end
-
-    def draw_pill_background(view, point, text, bg_color)
-      screen = view.screen_coords(point)
-      return if screen.x.zero? && screen.y.zero?
-
-      char_px = 7
-      pad_x = 8
-      w = (text.length * char_px) + (pad_x * 2)
-      h = 18
-
-      x0 = screen.x - (w / 2.0)
-      y0 = screen.y - (h / 2.0)
-      rect = [
-        Geom::Point3d.new(x0, y0, 0),
-        Geom::Point3d.new(x0 + w, y0, 0),
-        Geom::Point3d.new(x0 + w, y0 + h, 0),
-        Geom::Point3d.new(x0, y0 + h, 0)
-      ]
-      view.drawing_color = bg_color
-      view.draw2d(GL_POLYGON, rect)
-    rescue StandardError
-      nil # 화면 밖 투영 등으로 배경 렌더링만 실패해도 텍스트 시도는 계속한다
-    end
-
-    # 배경 pill과 별도로 그린다 — 하나가 실패해도 다른 하나는 남게 하기 위함.
-    # HUD 문구(draw_hud)는 옵션 Hash 없이 draw_text(point, text) 2-인자 형태로 호출했을 때만
-    # 정상적으로 보였다 — 옵션 Hash(3번째 인자)를 받으면 이 SketchUp 빌드에서 조용히 실패하는
-    # 것으로 보여, 검증된 2-인자 형태로 통일하고 색상은 drawing_color로만 지정한다.
-    def draw_pill_text(view, point, text)
-      view.drawing_color = 'white'
-      view.draw_text(point, text)
-    rescue StandardError => e
-      warn "[SUFX] draw_text 실패: #{e.message}"
-    end
-
     # 화면 고정 위치(스크린 좌표)에 항상 보이는 안내 문구를 그린다.
     # 카메라 각도/거리와 무관하게 "Convert 모드가 켜졌다"는 것을 즉시 확인할 수 있게 하기 위함.
+    # NOTE: view.draw_text는 SketchUp 빌드에 따라 렌더링되지 않는 경우가 있어(치수 라벨이
+    # 안 보이던 원인) 여기 문구는 "되면 좋고" 수준으로 남겨둔다. 실제 치수는 항상 동작하는
+    # push_dimensions_to_panel(패널 쪽 HTML 텍스트)로 표시한다.
     def draw_hud(view)
       text = "SUFX Convert · #{@rows} x #{@cols}칸 · 방향키:행/열 · Tab:기준면 · Enter:확정 · Esc:취소"
       view.drawing_color = 'red'
       view.draw_text([12, 12], text)
     rescue StandardError
-      nil # 일부 SketchUp 버전에서 화면좌표 draw_text 미지원 시 조용히 무시
+      nil
+    end
+
+    # 현재 셀 치수를 SUFX Tools 패널의 HTML 텍스트로 밀어넣는다 — 3D 뷰 안의 draw_text에
+    # 의존하지 않는, 항상 동작하는 치수 표시 경로.
+    def push_dimensions_to_panel(clear: false)
+      dialog = Sufx::UIPanel.dialog
+      return unless dialog && dialog.visible?
+
+      if clear
+        dialog.execute_script('updateConvertDims(null)')
+        return
+      end
+
+      return if @cols <= 0 || @rows <= 0
+
+      face = current_face
+      cell_w_mm = Units.inch_to_mm(face.width / @cols)
+      cell_h_mm = Units.inch_to_mm(face.height / @rows)
+      text = format('%d행 x %d열 · 셀 %.0f x %.0fmm', @rows, @cols, cell_w_mm, cell_h_mm)
+      dialog.execute_script("updateConvertDims(#{text.to_json})")
+    rescue StandardError => e
+      warn "[SUFX] push_dimensions_to_panel 실패: #{e.message}"
     end
 
     def current_face

@@ -112,4 +112,11 @@
   window.updateStatus = function (msg) {
     document.getElementById('status-line').textContent = msg || '';
   };
+
+  // Convert 인터랙티브 툴이 방향키로 격자를 조정할 때마다 호출된다.
+  // 3D 뷰 안의 draw_text가 일부 SketchUp 빌드에서 렌더링되지 않는 문제가 있어,
+  // 셀 치수는 여기 패널 쪽에서 항상 보이도록 표시한다.
+  window.updateConvertDims = function (text) {
+    document.getElementById('convert-dim-line').textContent = text || '';
+  };
 })();
