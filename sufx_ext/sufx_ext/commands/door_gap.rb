@@ -43,7 +43,7 @@ module Sufx
         model.start_operation('SUFX Door Gap', true)
         begin
           doors.each do |door|
-            Attrs.set(door, "gap_#{direction}", [mm.to_f, 0.0].max)
+            Attrs.set(door, "gap_#{direction}", mm.to_f)
             rebuild_door_geometry(door)
           end
           model.commit_operation
@@ -58,7 +58,7 @@ module Sufx
       def bump_gap(door, side, mm)
         key = "gap_#{side}"
         current = Attrs.get(door, key, 0.0).to_f
-        Attrs.set(door, key, [current + mm, 0.0].max)
+        Attrs.set(door, key, current + mm)
       end
 
       def rebuild_door_geometry(door)
