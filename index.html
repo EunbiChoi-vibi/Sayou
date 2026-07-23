@@ -5676,6 +5676,7 @@ function DepositStatusMini({ projectName }) {
           const props = page.properties;
           return {
             type: props["구분"]?.select?.name || "",
+            amount: Number(notionPlainText(props["금액"])) || 0,
             status: props["상태"]?.select?.name || "미입금",
           };
         }));
@@ -5700,8 +5701,11 @@ function DepositStatusMini({ projectName }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {visible.map((e) => (
             <div key={e.type} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ fontSize: 12, color: DASH.inkSoft }}>{e.type}</span>
-              <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 100, background: e.status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: e.status === "입금완료" ? DASH.teal : DASH.red }}>{e.status}</span>
+              <div>
+                <div style={{ fontSize: 12, color: DASH.inkSoft }}>{e.type}</div>
+                <div style={{ fontSize: 10, color: DASH.inkFaint }}>{e.amount.toLocaleString("ko-KR")}원</div>
+              </div>
+              <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 100, background: e.status === "입금완료" ? DASH.tealSoft : DASH.redSoft, color: e.status === "입금완료" ? DASH.teal : DASH.red, flexShrink: 0 }}>{e.status}</span>
             </div>
           ))}
         </div>
@@ -5934,7 +5938,7 @@ function ProjectSchedulePage({ onBack }) {
             </div>
           )}
         </Card>
-        <div style={{ flex: "0 0 220px", minWidth: 200 }}>
+        <div style={{ flex: "0 0 240px", minWidth: 220 }}>
           <DepositStatusMini projectName={projectName} />
         </div>
         </div>
