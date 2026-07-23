@@ -6,16 +6,24 @@ module Sufx
     KEY_RETURN = 13
 
     # 선택 유효성(그룹 1개)을 먼저 검사한 뒤 툴을 활성화한다.
+    # 반환값은 다른 커맨드들과 동일하게 [성공여부, 실패사유] 형태.
     def self.start!
       model = Sketchup.active_model
       selection = model.selection
+      if selection.size.zero?
+        msg = '변환할 그룹(Group)을 먼저 선택하세요.'
+        Sketchup.status_text = "SUFX Convert: #{msg}"
+        return [false, msg]
+      end
       unless selection.size == 1 && selection.first.is_a?(Sketchup::Group)
-        Sketchup.status_text = 'SUFX: Convert하려면 그룹(Group) 1개를 선택하세요.'
-        return false
+        msg = 'Convert는 그룹(Group) 1개만 선택했을 때 동작합니다. ' \
+              '(컴포넌트이거나 여러 개를 선택한 상태입니다)'
+        Sketchup.status_text = "SUFX Convert: #{msg}"
+        return [false, msg]
       end
 
       model.select_tool(new(selection.first))
-      true
+      [true, nil]
     end
 
     def initialize(group)
