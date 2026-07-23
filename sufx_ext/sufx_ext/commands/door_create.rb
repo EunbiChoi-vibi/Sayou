@@ -130,6 +130,8 @@ module Sufx
         end
       end
 
+      # 도어가 부착되는 만큼 바디 깊이를 줄이되, 통짜 솔리드로 뭉개지 않고
+      # 5면 캐비닛 쉘(상/하/좌/우판 + 얇은 뒷판) 구조를 유지한 채로 다시 만든다.
       def shrink_bodies_for_door(bodies, door_thk_inch, body_gap_inch)
         shrink = door_thk_inch + body_gap_inch
         bodies.each do |body|
@@ -137,7 +139,13 @@ module Sufx
 
           bounds = body.bounds
           new_min = Geom::Point3d.new(bounds.min.x, bounds.min.y + shrink, bounds.min.z)
-          BodyBlock.redefine_box!(body, new_min, bounds.max)
+
+          panel_thk = Units.mm_to_inch(Attrs.get(body, 'panel_thk', Constants::DEFAULT_PANEL_THK).to_f)
+          back_thk = Units.mm_to_inch(Attrs.get(body, 'back_panel_thk', Constants::DEFAULT_BACK_PANEL_THK).to_f)
+          normal = Attrs.get(body, 'front_normal', [0.0, -1.0, 0.0])
+          front_normal = Geom::Vector3d.new(normal[0], normal[1], normal[2])
+
+          BodyBlock.rebuild_body_shell!(body, new_min, bounds.max, front_normal, panel_thk, back_thk)
         end
       end
     end

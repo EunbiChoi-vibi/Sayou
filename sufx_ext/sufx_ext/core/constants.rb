@@ -4,7 +4,8 @@ module Sufx
     DEFAULT_BODY_GAP      = 4.0   # mm
     DEFAULT_DOOR_GAP_STEP = 1.0   # mm, 버튼 1클릭당 증가량
     MIN_CELL_SIZE         = 10.0  # mm, 하한 clamp
-    DEFAULT_PANEL_THK     = 18.0  # mm, 바디블럭 측판/상판/하판/뒷판 두께
+    DEFAULT_PANEL_THK      = 18.0 # mm, 바디블럭 측판/상판/하판 두께
+    DEFAULT_BACK_PANEL_THK = 5.0  # mm, 바디블럭 뒷판 두께(측판보다 얇은 게 일반적)
 
     # mm, 임의 추정값(placeholder) — 실측 후 조정 필요
     CHANNEL_CLEARANCE = { 0 => 0.0, 1 => 20.0, 2 => 40.0 }.freeze
