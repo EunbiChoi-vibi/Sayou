@@ -69,12 +69,22 @@ module Sufx
       end
 
       def resync_door_reference!(door)
+        front_normal_arr = Attrs.get(door, 'front_normal', [0.0, -1.0, 0.0])
+        frame = BodyBlock.axis_frame(Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2]))
         body_gap_inch = Units.mm_to_inch(Attrs.get(door, 'body_gap', Constants::DEFAULT_BODY_GAP).to_f)
-        bounds = door.bounds
-        front_y = bounds.max.y + body_gap_inch # 부착측(door_max_y) 기준으로 바디 정면 y를 역산
 
-        Attrs.set(door, 'origin_door_bounds',
-                  [bounds.min.x, front_y, bounds.min.z, bounds.max.x, front_y, bounds.max.z])
+        bounds = door.bounds
+        depth_min, depth_max = BodyBlock.axis_range(bounds, frame[:depth_axis])
+        # 부착측(door_attached_val) 기준으로 바디 정면 값을 역산한다.
+        door_attached_val = frame[:depth_sign].positive? ? depth_min : depth_max
+        body_front_val = door_attached_val - (frame[:depth_sign] * body_gap_inch)
+
+        u_min, u_max = BodyBlock.axis_range(bounds, frame[:u_sym])
+        v_min, v_max = BodyBlock.axis_range(bounds, frame[:v_sym])
+        p0 = BodyBlock.point_on_frame(frame, body_front_val, u_min, v_min)
+        p1 = BodyBlock.point_on_frame(frame, body_front_val, u_max, v_max)
+
+        Attrs.set(door, 'origin_door_bounds', [p0.x, p0.y, p0.z, p1.x, p1.y, p1.z])
         %w[gap_top gap_bottom gap_left gap_right].each { |k| Attrs.set(door, k, 0.0) }
       end
     end

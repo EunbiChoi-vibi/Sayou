@@ -216,5 +216,50 @@ module Sufx
       else [bounds.min.z, bounds.max.z]
       end
     end
+
+    def dominant_axis(vec)
+      ax, ay, az = vec.x.abs, vec.y.abs, vec.z.abs
+      return :x if ax >= ay && ax >= az
+      return :y if ay >= az
+
+      :z
+    end
+
+    # front_normal_vec(바디의 "열린 면" 바깥쪽 방향, 월드축 정렬 단위벡터)로부터
+    # 도어/갭 계산에 필요한 로컬 좌표계를 만든다.
+    # - depth_axis/depth_sign: 문이 붙는 방향의 축과 부호(+1: 그 축의 max쪽이 바깥, -1: min쪽이 바깥)
+    # - u_axis/u_sym: 좌우(가로) 방향, v_axis/v_sym: 상하(세로) 방향 — 가능하면 Z를 세로로 둔다.
+    # Convert에서 어떤 면(Tab으로 전환한 면)을 선택했든 도어가 그 면을 바라보고 붙도록
+    # 하기 위한 공용 헬퍼 — door_create.rb/door_gap.rb에서 공유해서 쓴다.
+    def axis_frame(front_normal_vec)
+      depth_axis = dominant_axis(front_normal_vec)
+      depth_sign = front_normal_vec.send(depth_axis) >= 0 ? 1 : -1
+
+      remaining = %i[x y z] - [depth_axis]
+      v_sym = remaining.include?(:z) ? :z : remaining.first
+      u_sym = (remaining - [v_sym]).first
+
+      unit = { x: Geom::Vector3d.new(1, 0, 0), y: Geom::Vector3d.new(0, 1, 0), z: Geom::Vector3d.new(0, 0, 1) }
+      {
+        depth_axis: depth_axis,
+        depth_sign: depth_sign,
+        u_sym: u_sym,
+        v_sym: v_sym,
+        u_axis: unit[u_sym],
+        v_axis: unit[v_sym]
+      }
+    end
+
+    # depth_axis/u_sym/v_sym(axis_frame에서 얻은 것)에 각각 값을 배정해 Point3d를 만든다.
+    def point_on_frame(frame, depth_val, u_val, v_val)
+      coords = { frame[:depth_axis] => depth_val, frame[:u_sym] => u_val, frame[:v_sym] => v_val }
+      Geom::Point3d.new(coords[:x], coords[:y], coords[:z])
+    end
+
+    # point_on_frame의 역연산 — 월드좌표 Point3d에서 [depth_val, u_val, v_val]을 뽑아낸다.
+    def axis_values(frame, point)
+      coords = { x: point.x, y: point.y, z: point.z }
+      [coords[frame[:depth_axis]], coords[frame[:u_sym]], coords[frame[:v_sym]]]
+    end
   end
 end

@@ -44,8 +44,15 @@ module Sufx
         origin = Attrs.get(door, 'origin_door_bounds')
         return unless origin.is_a?(Array) && origin.size == 6
 
-        base_min = Geom::Point3d.new(origin[0], origin[1], origin[2])
-        base_max = Geom::Point3d.new(origin[3], origin[4], origin[5])
+        front_normal_arr = Attrs.get(door, 'front_normal', [0.0, -1.0, 0.0])
+        frame = BodyBlock.axis_frame(Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2]))
+
+        p_a = Geom::Point3d.new(origin[0], origin[1], origin[2])
+        p_b = Geom::Point3d.new(origin[3], origin[4], origin[5])
+        body_front_val, u_a, v_a = BodyBlock.axis_values(frame, p_a)
+        _depth_b, u_b, v_b = BodyBlock.axis_values(frame, p_b)
+        u0_base, u1_base = [u_a, u_b].minmax
+        v0_base, v1_base = [v_a, v_b].minmax
 
         door_thk_inch = Units.mm_to_inch(Attrs.get(door, 'door_thk', Constants::DEFAULT_DOOR_THK).to_f)
         body_gap_inch = Units.mm_to_inch(Attrs.get(door, 'body_gap', Constants::DEFAULT_BODY_GAP).to_f)
@@ -55,30 +62,29 @@ module Sufx
         gap_top = Units.mm_to_inch(Attrs.get(door, 'gap_top', 0.0).to_f)
         gap_bottom = Units.mm_to_inch(Attrs.get(door, 'gap_bottom', 0.0).to_f)
 
-        x0 = base_min.x + gap_left
-        x1 = base_max.x - gap_right
-        z0 = base_min.z + gap_bottom
-        z1 = base_max.z - gap_top
+        u0 = u0_base + gap_left
+        u1 = u1_base - gap_right
+        v0 = v0_base + gap_bottom
+        v1 = v1_base - gap_top
 
         min_clamp = Units.mm_to_inch(Constants::MIN_CELL_SIZE)
-        if (x1 - x0) < min_clamp
-          mid = (x0 + x1) / 2.0
-          x0 = mid - (min_clamp / 2.0)
-          x1 = mid + (min_clamp / 2.0)
+        if (u1 - u0) < min_clamp
+          mid = (u0 + u1) / 2.0
+          u0 = mid - (min_clamp / 2.0)
+          u1 = mid + (min_clamp / 2.0)
         end
-        if (z1 - z0) < min_clamp
-          mid = (z0 + z1) / 2.0
-          z0 = mid - (min_clamp / 2.0)
-          z1 = mid + (min_clamp / 2.0)
+        if (v1 - v0) < min_clamp
+          mid = (v0 + v1) / 2.0
+          v0 = mid - (min_clamp / 2.0)
+          v1 = mid + (min_clamp / 2.0)
         end
 
-        front_y = base_min.y # origin_door_bounds 저장 시 min.y == max.y (부착 시점의 바디 정면 기준)
-        door_max_y = front_y - body_gap_inch
-        door_min_y = door_max_y - door_thk_inch
+        door_attached_val = body_front_val + (frame[:depth_sign] * body_gap_inch)
+        door_outer_val = door_attached_val + (frame[:depth_sign] * door_thk_inch)
 
         BodyBlock.redefine_box!(door,
-                                 Geom::Point3d.new(x0, door_min_y, z0),
-                                 Geom::Point3d.new(x1, door_max_y, z1))
+                                 BodyBlock.point_on_frame(frame, door_attached_val, u0, v0),
+                                 BodyBlock.point_on_frame(frame, door_outer_val, u1, v1))
       end
     end
   end

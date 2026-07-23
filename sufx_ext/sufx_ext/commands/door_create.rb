@@ -4,12 +4,12 @@ module Sufx
     #
     # 정합 규칙: 바디는 Convert 시점에 이미 door_thk+body_gap만큼 셋백되어 만들어진다
     # (core/body_block.rb#build_cell_body 참고). 그래서 여기서는 바디를 추가로 깎지
-    # 않고, 이미 셋백된 바디 앞면(front_y = combined.min.y)을 기준으로 body_gap만큼
-    # 띄워서 도어를 놓기만 하면 도어-바디 최종 간격이 정확히 body_gap이 된다.
-    # (Convert 이전 구버전 바디처럼 셋백 없이 만들어진 바디가 선택된 경우에도, 그
-    # 상태 그대로 도어가 body_gap만큼 띄워져 붙는다 — 추가 축소를 하지 않을 뿐이다.)
+    # 않고, 이미 셋백된 바디 앞면을 기준으로 body_gap만큼 띄워서 도어를 놓기만 하면
+    # 도어-바디 최종 간격이 정확히 body_gap이 된다.
     #
-    # 방향 가정: 바디블럭의 정면은 -Y 방향(Convert 기본면 index 0과 동일)이라고 가정한다.
+    # 방향: Convert에서 Tab으로 어떤 면을 선택했든, 그 바디에 저장된 front_normal
+    # 속성(§core/body_block.rb#axis_frame)을 그대로 따라가 그 면을 바라보고 도어가
+    # 붙는다 — 더 이상 -Y 고정 가정을 쓰지 않는다.
     module DoorCreate
       module_function
 
@@ -61,26 +61,36 @@ module Sufx
 
       def build_doors(model, combined, door_type, door_thk_mm, door_thk_inch,
                        body_gap_mm, body_gap_inch, gaps, channel_mode, first_body)
-        x0 = combined.min.x + Units.mm_to_inch(gaps[:left])
-        x1 = combined.max.x - Units.mm_to_inch(gaps[:right])
-        z0 = combined.min.z + Units.mm_to_inch(gaps[:bottom])
-        z1 = combined.max.z - Units.mm_to_inch(gaps[:top])
-        front_y = combined.min.y
+        front_normal_arr = Attrs.get(first_body, 'front_normal', [0.0, -1.0, 0.0])
+        frame = BodyBlock.axis_frame(Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2]))
+
+        u_min, u_max = BodyBlock.axis_range(combined, frame[:u_sym])
+        v_min, v_max = BodyBlock.axis_range(combined, frame[:v_sym])
+        u0 = u_min + Units.mm_to_inch(gaps[:left])
+        u1 = u_max - Units.mm_to_inch(gaps[:right])
+        v0 = v_min + Units.mm_to_inch(gaps[:bottom])
+        v1 = v_max - Units.mm_to_inch(gaps[:top])
 
         if door_type == :drawer
           clearance = Units.mm_to_inch(Constants::CHANNEL_CLEARANCE[channel_mode] || 0)
-          z1 = combined.max.z - clearance # §4.7: 챗넬 홈 높이만큼 서랍 상단 축소
+          v1 = v_max - clearance # §4.7: 챗넬 홈 높이만큼 서랍 상단 축소
         end
 
-        door_max_y = front_y - body_gap_inch
-        door_min_y = door_max_y - door_thk_inch
+        depth_min, depth_max = BodyBlock.axis_range(combined, frame[:depth_axis])
+        body_front_val = frame[:depth_sign].positive? ? depth_max : depth_min
+        door_attached_val = body_front_val + (frame[:depth_sign] * body_gap_inch)
+        door_outer_val = door_attached_val + (frame[:depth_sign] * door_thk_inch)
 
-        leaf_specs(door_type, x0, x1, z0, z1).map do |lx0, lz0, lx1, lz1|
-          group = BodyBlock.create_box(model.active_entities,
-                                        Geom::Point3d.new(lx0, door_min_y, lz0),
-                                        Geom::Point3d.new(lx1, door_max_y, lz1))
+        leaf_specs(door_type, u0, u1, v0, v1).map do |lu0, lv0, lu1, lv1|
+          p0 = BodyBlock.point_on_frame(frame, door_attached_val, lu0, lv0)
+          p1 = BodyBlock.point_on_frame(frame, door_outer_val, lu1, lv1)
+          group = BodyBlock.create_box(model.active_entities, p0, p1)
           comp = group.to_component
           comp.definition.name = Naming.next_name(Constants::NAME_DOOR)
+
+          origin_p0 = BodyBlock.point_on_frame(frame, body_front_val, lu0, lv0)
+          origin_p1 = BodyBlock.point_on_frame(frame, body_front_val, lu1, lv1)
+
           Attrs.set_all(comp,
                          'block_type' => 'door',
                          'door_type' => door_type.to_s,
@@ -90,8 +100,10 @@ module Sufx
                          'gap_bottom' => 0.0,
                          'gap_left' => 0.0,
                          'gap_right' => 0.0,
+                         'front_normal' => front_normal_arr,
                          'parent_body_id' => (Attrs.get(first_body, 'group_id') || first_body.guid).to_s,
-                         'origin_door_bounds' => [lx0, front_y, lz0, lx1, front_y, lz1])
+                         'origin_door_bounds' => [origin_p0.x, origin_p0.y, origin_p0.z,
+                                                   origin_p1.x, origin_p1.y, origin_p1.z])
           TagManager.assign(model, comp, "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOOR}")
           comp
         end
@@ -99,12 +111,12 @@ module Sufx
 
       # door_type: :left/:right(단문), :double(반반, 2짝), :drawer(서랍) — 모두 박스 1~2개로 근사.
       # left/right는 지오메트리는 동일하고 힌지 방향만 속성(door_type)에 기록해 구분한다.
-      def leaf_specs(door_type, x0, x1, z0, z1)
+      def leaf_specs(door_type, u0, u1, v0, v1)
         if door_type == :double
-          mid_x = (x0 + x1) / 2.0
-          [[x0, z0, mid_x, z1], [mid_x, z0, x1, z1]]
+          mid_u = (u0 + u1) / 2.0
+          [[u0, v0, mid_u, v1], [mid_u, v0, u1, v1]]
         else
-          [[x0, z0, x1, z1]]
+          [[u0, v0, u1, v1]]
         end
       end
 
@@ -112,20 +124,27 @@ module Sufx
       def build_doorline(model, door_comps, inset_mm: 2.0)
         inset = Units.mm_to_inch(inset_mm)
         door_comps.each do |door|
+          front_normal_arr = Attrs.get(door, 'front_normal', [0.0, -1.0, 0.0])
+          frame = BodyBlock.axis_frame(Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2]))
           bounds = door.bounds
-          y = bounds.min.y # 도어 바깥쪽(밖에서 보이는) 면
-          x0 = bounds.min.x + inset
-          x1 = bounds.max.x - inset
-          z0 = bounds.min.z + inset
-          z1 = bounds.max.z - inset
-          next if x1 <= x0 || z1 <= z0
+
+          depth_min, depth_max = BodyBlock.axis_range(bounds, frame[:depth_axis])
+          outer_val = frame[:depth_sign].positive? ? depth_max : depth_min
+
+          u_min, u_max = BodyBlock.axis_range(bounds, frame[:u_sym])
+          v_min, v_max = BodyBlock.axis_range(bounds, frame[:v_sym])
+          u0 = u_min + inset
+          u1 = u_max - inset
+          v0 = v_min + inset
+          v1 = v_max - inset
+          next if u1 <= u0 || v1 <= v0
 
           group = model.active_entities.add_group
           pts = [
-            Geom::Point3d.new(x0, y, z0),
-            Geom::Point3d.new(x1, y, z0),
-            Geom::Point3d.new(x1, y, z1),
-            Geom::Point3d.new(x0, y, z1)
+            BodyBlock.point_on_frame(frame, outer_val, u0, v0),
+            BodyBlock.point_on_frame(frame, outer_val, u1, v0),
+            BodyBlock.point_on_frame(frame, outer_val, u1, v1),
+            BodyBlock.point_on_frame(frame, outer_val, u0, v1)
           ]
           group.entities.add_edges(pts + [pts.first])
           TagManager.assign(model, group, "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOORLINE}")
