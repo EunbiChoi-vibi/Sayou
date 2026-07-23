@@ -131,31 +131,60 @@ module Sufx
     #
     # 실제 가구 짜임 순서를 그대로 따라 서로 겹치지 않게(면이 깨지지 않게) 만든다:
     #   1) 측판(좌/우, panel_thk) — 세로/깊이 전체를 관통하는 기준 부재
-    #   2) 상/하판(panel_thk) — 측판 두께만큼 제외한 폭으로, 측판 사이에 낀다 (깊이는 전체 관통)
-    #   3) 뒷판(back_thk) — 측판 두께 + 상하판 두께를 모두 제외한 폭/높이로, 그 안쪽 맨 뒤에 낀다
+    #   2) 뒷판(back_thk) — 세로는 측판과 동일한 풀 하이트, 가로는 측판 두께만큼 제외,
+    #      맨 뒤(n 방향 끝)에 얇게 낀다
+    #   3) 상/하판(panel_thk) — 가로는 측판 두께, 깊이는 뒷판 두께를 제외한 범위(뒷판 앞쪽)까지
     # 이렇게 하면 5개 패널의 부피가 서로 겹치지 않아(경계면만 맞닿아) 겹친 면/여분의 선이 남지 않는다.
     def build_shell(target_entities, corner, u, v, n, cell_w, cell_h, depth, panel_thk, back_thk)
       group = target_entities.add_group
       entities = group.entities
+      depth_front = depth - back_thk # 상/하판이 차지하는 깊이(뒷판 두께만큼 제외)
 
-      # 1) 측판
+      # 1) 측판 — 세로/깊이 전체 관통
       fill_box_faces(entities, corner,
                       corner.offset(u, panel_thk).offset(v, cell_h).offset(n, depth)) # 좌측판
       fill_box_faces(entities, corner.offset(u, cell_w - panel_thk),
                       corner.offset(u, cell_w).offset(v, cell_h).offset(n, depth)) # 우측판
 
-      # 2) 상/하판 — u방향으로 측판 두께만큼 안쪽에서 시작/종료
-      fill_box_faces(entities, corner.offset(u, panel_thk),
-                      corner.offset(u, cell_w - panel_thk).offset(v, panel_thk).offset(n, depth)) # 하판
-      fill_box_faces(entities, corner.offset(u, panel_thk).offset(v, cell_h - panel_thk),
-                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth)) # 상판
-
-      # 3) 뒷판 — u/v 모두 측판·상하판 두께만큼 안쪽에서 시작/종료
+      # 2) 뒷판 — 세로는 측판과 동일(풀 하이트), 가로는 측판 두께 제외, 맨 뒤에 얇게
       fill_box_faces(entities,
-                      corner.offset(u, panel_thk).offset(v, panel_thk).offset(n, depth - back_thk),
-                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h - panel_thk).offset(n, depth)) # 뒷판
+                      corner.offset(u, panel_thk).offset(n, depth - back_thk),
+                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth)) # 뒷판
+
+      # 3) 상/하판 — 가로는 측판 두께 제외, 깊이는 뒷판 두께만큼 제외(뒷판과 안 겹치게)
+      fill_box_faces(entities, corner.offset(u, panel_thk),
+                      corner.offset(u, cell_w - panel_thk).offset(v, panel_thk).offset(n, depth_front)) # 하판
+      fill_box_faces(entities, corner.offset(u, panel_thk).offset(v, cell_h - panel_thk),
+                      corner.offset(u, cell_w - panel_thk).offset(v, cell_h).offset(n, depth_front)) # 상판
 
       group
+    end
+
+    # 이미 알고 있는 월드 바운딩박스(min_pt~max_pt)로부터 open-front 쉘을 만든다.
+    # Merge처럼 "기존 바디들을 합친 새 바운딩박스"로 바디를 다시 만들어야 할 때 쓴다
+    # — build_cell_body처럼 Convert의 CandidateFace가 없어도 front_normal_vec만으로 동작한다.
+    def build_shell_from_bounds(target_entities, min_pt, max_pt, front_normal_vec, panel_thk_inch, back_thk_inch)
+      frame = axis_frame(front_normal_vec)
+      depth_a, u_a, v_a = axis_values(frame, min_pt)
+      depth_b, u_b, v_b = axis_values(frame, max_pt)
+      depth_lo, depth_hi = [depth_a, depth_b].minmax
+      u_lo, u_hi = [u_a, u_b].minmax
+      v_lo, v_hi = [v_a, v_b].minmax
+
+      depth = depth_hi - depth_lo
+      cell_w = u_hi - u_lo
+      cell_h = v_hi - v_lo
+
+      if (panel_thk_inch * 2) >= [cell_w, cell_h].min || back_thk_inch >= depth
+        return create_box(target_entities, min_pt, max_pt)
+      end
+
+      front_depth_val = frame[:depth_sign].positive? ? depth_hi : depth_lo
+      corner = point_on_frame(frame, front_depth_val, u_lo, v_lo)
+      n = front_normal_vec.reverse
+
+      build_shell(target_entities, corner, frame[:u_axis], frame[:v_axis], n, cell_w, cell_h, depth,
+                  panel_thk_inch, back_thk_inch)
     end
 
     # entity를 바디블럭 컴포넌트로 확정하고 이름/속성/태그를 세팅한다 (§4.1a).

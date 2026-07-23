@@ -32,7 +32,7 @@ module Sufx
         model.start_operation('SUFX Merge', true)
         begin
           combined = BodyBlock.union_bounds(selection)
-          group = BodyBlock.create_box(model.active_entities, combined.min, combined.max)
+          group = build_merged_group(model, selection.first, block_type, combined)
           comp = group.to_component
           comp.definition.name = Naming.next_name(prefix_for(block_type))
           Attrs.copy(selection.first, comp)
@@ -53,6 +53,20 @@ module Sufx
           return [false, e.message]
         end
         [true, nil]
+      end
+
+      # 바디(body)를 병합할 때는 통짜 솔리드가 아니라 쉘 구조(측/상/하/뒷판)를 유지한 채
+      # 합쳐진 바운딩박스로 다시 만든다. 도어/베이스/다리 등은 기존처럼 통짜 박스로 합친다.
+      def build_merged_group(model, reference, block_type, combined)
+        return BodyBlock.create_box(model.active_entities, combined.min, combined.max) unless block_type == 'body'
+
+        front_normal_arr = Attrs.get(reference, 'front_normal', [0.0, -1.0, 0.0])
+        front_normal = Geom::Vector3d.new(front_normal_arr[0], front_normal_arr[1], front_normal_arr[2])
+        panel_thk = Units.mm_to_inch(Attrs.get(reference, 'panel_thk', Constants::DEFAULT_PANEL_THK).to_f)
+        back_thk = Units.mm_to_inch(Attrs.get(reference, 'back_panel_thk', Constants::DEFAULT_BACK_PANEL_THK).to_f)
+
+        BodyBlock.build_shell_from_bounds(model.active_entities, combined.min, combined.max,
+                                           front_normal, panel_thk, back_thk)
       end
 
       def prefix_for(block_type)
