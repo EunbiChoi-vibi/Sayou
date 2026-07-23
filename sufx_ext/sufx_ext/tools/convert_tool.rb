@@ -193,9 +193,12 @@ module Sufx
     end
 
     # 배경 pill과 별도로 그린다 — 하나가 실패해도 다른 하나는 남게 하기 위함.
-    # options는 Ruby 버전별 키워드인자 암묵 변환 이슈를 피하려고 명시적 Hash 리터럴로 전달한다.
+    # HUD 문구(draw_hud)는 옵션 Hash 없이 draw_text(point, text) 2-인자 형태로 호출했을 때만
+    # 정상적으로 보였다 — 옵션 Hash(3번째 인자)를 받으면 이 SketchUp 빌드에서 조용히 실패하는
+    # 것으로 보여, 검증된 2-인자 형태로 통일하고 색상은 drawing_color로만 지정한다.
     def draw_pill_text(view, point, text)
-      view.draw_text(point, text, { color: 'white', size: 11 })
+      view.drawing_color = 'white'
+      view.draw_text(point, text)
     rescue StandardError => e
       warn "[SUFX] draw_text 실패: #{e.message}"
     end
