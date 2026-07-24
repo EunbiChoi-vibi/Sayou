@@ -11,6 +11,10 @@ module Sufx
     #   CH1(상챗넬): 브라켓 1개, 상판 바로 아래
     #   CH2(상+중챗넬): CH1 브라켓 + 본체 세로 중앙에 브라켓 1개 추가
     #
+    # 좌/우 18T 측판은 밴드(브라켓이 들어가는 구간)에서는 리세스된 채로 두고,
+    # 밴드가 아닌 구간에서만 원래 전면까지 다시 튀어나오게 채운다 — 그래야
+    # 브라켓이 들어갈 자리는 비워두면서도 나머지 구간의 옆선은 뚫려 보이지 않는다.
+    #
     # 정밀 boolean 절삭이 아니라 실제 지오메트리(박스 조합)를 매번 처음부터 재구성하는
     # 방식이다. 최초 1회 캡처해둔 channel_orig_bounds(파내기 전의 전체 바디 바운드)를
     # 기준으로 매 호출마다 바디 내부 전체(쉘 + 브라켓)를 다시 만들어야, CH1<->CH2<->없음을
@@ -90,27 +94,36 @@ module Sufx
         # CH1: 바디 맨 위 끝선에 맞춰서(상판 두께만큼 인셋하지 않고 v_max까지 꽉 채움)
         top_hi = v_max
         top_lo = top_hi - band_h
-        build_band(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, top_lo, top_hi)
+        bands = [[top_lo, top_hi]]
 
         # CH2: CH1 + 본체 세로 중앙에 브라켓 하나 더
-        return unless mode.to_i >= 2
+        if mode.to_i >= 2
+          mid = (v_min + v_max) / 2.0
+          bands << [mid - (band_h / 2.0), mid + (band_h / 2.0)]
+        end
 
-        mid = (v_min + v_max) / 2.0
-        mid_lo = mid - (band_h / 2.0)
-        mid_hi = mid + (band_h / 2.0)
-        build_band(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, mid_lo, mid_hi)
+        bands.each do |lo, hi|
+          add_bracket(model, definition.entities, frame, shrunk_front_val, front_val, u_min, u_max, lo, hi)
+        end
+
+        # 밴드가 없는 구간(=챗넬이 붙지 않는 구간)에서만 좌/우 측판을 원래 전면까지
+        # 다시 튀어나오게 채운다. 밴드 구간은 챗넬 브라켓이 들어갈 자리라 그대로
+        # 리세스된 채로 둬야 한다(반대로 하면 브라켓과 측판이 겹친다).
+        cursor = v_min
+        bands.sort_by(&:first).each do |lo, hi|
+          if lo > cursor
+            add_side_panel_patch(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk,
+                                  u_min, u_max, cursor, lo)
+          end
+          cursor = [cursor, hi].max
+        end
+        return unless v_max > cursor
+
+        add_side_panel_patch(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk,
+                              u_min, u_max, cursor, v_max)
       end
 
-      # 챗넬 밴드 하나(브라켓 + 그 구간의 좌/우 측판 돌출 패치)를 만든다.
-      # 쉘 전체가 파여있는(recess) 상태라, 좌/우 측판(18T)도 이 밴드 구간에서는
-      # 원래 전면까지 다시 튀어나오게 패치해야 밴드가 없는 구간과 달리 옆선이
-      # 뚫려 보이지 않는다(§측판 돌출 요구사항).
-      def build_band(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
-        add_bracket(model, entities, frame, shrunk_front_val, front_val, u_min, u_max, v_lo, v_hi)
-        add_side_panel_patch(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
-      end
-
-      # 밴드 구간에서만 좌/우 측판을 원래 전면까지 튀어나오게 채운다.
+      # 밴드가 없는 구간에서 좌/우 측판을 원래 전면까지 튀어나오게 채운다.
       def add_side_panel_patch(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
         left = BodyBlock.create_box(entities,
                                      BodyBlock.point_on_frame(frame, shrunk_front_val, u_min, v_lo),
