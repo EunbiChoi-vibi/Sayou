@@ -17,6 +17,15 @@ module Sufx
     # mm, 챗넬 밴드 바로 아래에서 도어/서랍 상단이 추가로 띄워야 하는 여유(모든 도어 타입 공통).
     CHANNEL_DOOR_CLEARANCE_MM = 15.0
 
+    # Base(좌대)/Leg(다리) — Convert 인터랙티브 툴 안에서 B/L로 토글, +/-로 5mm씩 조정.
+    DEFAULT_BASE_HEIGHT_MM = 60.0  # mm, Base 기본 높이
+    DEFAULT_LEG_HEIGHT_MM  = 100.0 # mm, Leg 기본 높이
+    SUPPORT_HEIGHT_STEP_MM = 5.0   # mm, +/- 1회당 조정량
+    SUPPORT_MIN_HEIGHT_MM  = 5.0   # mm, 하한 clamp
+    LEG_DIAMETER_MM        = 40.0  # mm, 다리 원기둥 지름(D40)
+    LEG_INSET_MM           = 80.0  # mm, 다리 중심이 모서리에서 안쪽으로 들어가는 거리
+    LEG_VALANCE_THK_MM     = 10.0  # mm, 다리 전면 가림막 두께(10T)
+
     SCALE_HANDLE_AXES = [:x, :y, :z].freeze
 
     ADJACENCY_TOLERANCE_MM = 0.1

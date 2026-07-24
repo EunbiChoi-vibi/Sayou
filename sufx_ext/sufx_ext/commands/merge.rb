@@ -74,12 +74,17 @@ module Sufx
         when 'door' then Constants::NAME_DOOR
         when 'base' then Constants::NAME_BASE
         when 'leg' then Constants::NAME_LEG
+        when 'valance' then Constants::NAME_VALANCE
         else Constants::NAME_BODY
         end
       end
 
       def tag_for(block_type)
-        block_type == 'door' ? "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOOR}" : Constants::TAG_BODY
+        case block_type
+        when 'door' then "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOOR}"
+        when 'valance' then Constants::TAG_VALANCE
+        else Constants::TAG_BODY
+        end
       end
 
       def resync_door_reference!(door)

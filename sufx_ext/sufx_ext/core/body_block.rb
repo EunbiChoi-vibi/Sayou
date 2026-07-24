@@ -79,6 +79,18 @@ module Sufx
       group
     end
 
+    # center를 밑면 중심으로, axis_vector 방향으로 height만큼 밀어올린 원기둥을
+    # target_entities 안에 새 그룹으로 생성한다(Leg 다리용).
+    def create_cylinder(target_entities, center, radius, height, axis_vector)
+      group = target_entities.add_group
+      entities = group.entities
+      circle_edges = entities.add_circle(center, axis_vector, radius, 24)
+      face = entities.add_face(circle_edges)
+      face.reverse! if face.normal.dot(axis_vector) < 0
+      face.pushpull(height)
+      group
+    end
+
     # 기존 그룹/컴포넌트 인스턴스의 지오메트리를 새 box 치수로 완전히 재생성한다.
     # (Door Gap, 바디 사후축소, Channel 홈 재생성 등에서 재사용)
     # NOTE: instance.transformation이 항등(identity)이라는 전제 하에 동작한다.
