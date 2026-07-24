@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>SUFX Tools</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header class="sufx-header">
+    <span class="title">SUFX Tools</span>
+  </header>
+
+  <main class="sufx-panel">
+    <button id="btn-convert" class="btn btn-primary">Convert</button>
+    <div id="convert-dim-line" class="status-text convert-dim-line"></div>
+
+    <button id="btn-merge" class="btn">Merge</button>
+
+    <section class="row">
+      <button id="btn-divh" class="btn">Div H</button>
+      <input id="input-divh-count" type="number" value="2" min="2" step="1" class="input-count">
+      <button id="btn-divv" class="btn">Div V</button>
+      <input id="input-divv-count" type="number" value="2" min="2" step="1" class="input-count">
+    </section>
+
+    <hr>
+
+    <section class="section-title">DOOR</section>
+    <section class="grid-2">
+      <button class="btn door-btn" data-door="left">좌경</button>
+      <button class="btn door-btn" data-door="right">우경</button>
+      <button class="btn door-btn" data-door="double">반반</button>
+      <button class="btn door-btn" data-door="drawer">서랍</button>
+    </section>
+    <section class="row">
+      <label>DOOR THK</label>
+      <input id="input-door-thk" type="number" value="18.0" step="0.5" class="input-mm">
+      <label>BODY GAP</label>
+      <input id="input-body-gap" type="number" value="4.0" step="0.5" class="input-mm">
+    </section>
+
+    <hr>
+
+    <section class="door-gap-title-row">
+      <span class="section-title">DOOR GAP</span>
+      <span id="door-gap-name" class="door-gap-name"></span>
+    </section>
+    <div id="door-gap-status" class="status-text">No door selected</div>
+    <div class="gap-cross">
+      <div class="gap-slot gap-slot-top">
+        <span class="gap-icon">▲</span>
+        <input type="number" id="gap-top-input" class="input-gap-num" value="0" step="1">
+      </div>
+      <div class="gap-slot gap-slot-left">
+        <span class="gap-icon">◀</span>
+        <input type="number" id="gap-left-input" class="input-gap-num" value="0" step="1">
+      </div>
+      <div class="gap-slot gap-slot-center">
+        <button id="gap-reset" class="btn gap-reset-btn" data-dir="reset" title="기본값(0mm)으로 리셋">R</button>
+        <div class="gap-all-stepper" title="전체 방향 갭 조정">
+          <button class="gap-all-btn" data-delta="1">▲</button>
+          <button class="gap-all-btn" data-delta="-1">▼</button>
+        </div>
+      </div>
+      <div class="gap-slot gap-slot-right">
+        <input type="number" id="gap-right-input" class="input-gap-num" value="0" step="1">
+        <span class="gap-icon">▶</span>
+      </div>
+      <div class="gap-slot gap-slot-bottom">
+        <input type="number" id="gap-bottom-input" class="input-gap-num" value="0" step="1">
+        <span class="gap-icon">▼</span>
+      </div>
+    </div>
+
+    <hr>
+
+    <section class="section-title">CHANNEL</section>
+    <div id="channel-status" class="status-text">No body selected</div>
+    <section class="grid-3">
+      <button class="btn channel-btn" data-mode="0">없음</button>
+      <button class="btn channel-btn" data-mode="1">상</button>
+      <button class="btn channel-btn" data-mode="2">상+중</button>
+    </section>
+  </main>
+
+  <footer class="sufx-footer">
+    <span id="status-line" class="status-line"></span>
+  </footer>
+
+  <script src="panel.js"></script>
+</body>
+</html>
