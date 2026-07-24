@@ -115,12 +115,13 @@ module Sufx
 
         # 바닥판도 측판과 동일한 규칙: 밴드가 그 v구간을 덮지 않으면(바닥판은 밴드가
         # 항상 상단 쪽에 있어 거의 항상 해당) 원래 전면보다 4mm 더 튀어나오게 채운다.
+        # 폭은 좌/우 측판 패치 영역(각 panel_thk)과 겹치지 않도록 양쪽을 제외한다.
         bottom_lo = v_min
         bottom_hi = v_min + panel_thk
         return if bands.any? { |lo, hi| bottom_lo < hi && bottom_hi > lo }
 
         add_bottom_panel_patch(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk,
-                                u_min, u_max, bottom_lo, bottom_hi)
+                                u_min + panel_thk, u_max - panel_thk, bottom_lo, bottom_hi)
       end
 
       # 챗넬 밴드(브라켓이 들어가는 v구간) 목록을 반환한다. v_min/v_max는 바디의
