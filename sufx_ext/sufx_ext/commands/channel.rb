@@ -20,7 +20,7 @@ module Sufx
     module Channel
       module_function
 
-      GROOVE_COLOR = Sketchup::Color.new(255, 140, 0).freeze
+      GROOVE_COLOR = Sketchup::Color.new(255, 255, 255).freeze
 
       def run!(mode)
         model = Sketchup.active_model
@@ -90,14 +90,37 @@ module Sufx
         # CH1: 바디 맨 위 끝선에 맞춰서(상판 두께만큼 인셋하지 않고 v_max까지 꽉 채움)
         top_hi = v_max
         top_lo = top_hi - band_h
-        add_bracket(model, definition.entities, frame, shrunk_front_val, front_val, u_min, u_max, top_lo, top_hi)
+        build_band(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, top_lo, top_hi)
 
         # CH2: CH1 + 본체 세로 중앙에 브라켓 하나 더
         return unless mode.to_i >= 2
 
         mid = (v_min + v_max) / 2.0
-        add_bracket(model, definition.entities, frame, shrunk_front_val, front_val, u_min, u_max,
-                    mid - (band_h / 2.0), mid + (band_h / 2.0))
+        mid_lo = mid - (band_h / 2.0)
+        mid_hi = mid + (band_h / 2.0)
+        build_band(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, mid_lo, mid_hi)
+      end
+
+      # 챗넬 밴드 하나(브라켓 + 그 구간의 좌/우 측판 돌출 패치)를 만든다.
+      # 쉘 전체가 파여있는(recess) 상태라, 좌/우 측판(18T)도 이 밴드 구간에서는
+      # 원래 전면까지 다시 튀어나오게 패치해야 밴드가 없는 구간과 달리 옆선이
+      # 뚫려 보이지 않는다(§측판 돌출 요구사항).
+      def build_band(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
+        add_bracket(model, entities, frame, shrunk_front_val, front_val, u_min, u_max, v_lo, v_hi)
+        add_side_panel_patch(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
+      end
+
+      # 밴드 구간에서만 좌/우 측판을 원래 전면까지 튀어나오게 채운다.
+      def add_side_panel_patch(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
+        left = BodyBlock.create_box(entities,
+                                     BodyBlock.point_on_frame(frame, shrunk_front_val, u_min, v_lo),
+                                     BodyBlock.point_on_frame(frame, front_val, u_min + panel_thk, v_hi))
+        tag_groove(model, left)
+
+        right = BodyBlock.create_box(entities,
+                                      BodyBlock.point_on_frame(frame, shrunk_front_val, u_max - panel_thk, v_lo),
+                                      BodyBlock.point_on_frame(frame, front_val, u_max, v_hi))
+        tag_groove(model, right)
       end
 
       # 파내기 전(=풀 뎁스)의 바디 바운드를 최초 1회 캡처해 저장해두고 계속 재사용한다.

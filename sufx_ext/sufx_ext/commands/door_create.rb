@@ -84,7 +84,7 @@ module Sufx
         door_attached_val = body_front_val + (frame[:depth_sign] * effective_gap_inch)
         door_outer_val = door_attached_val + (frame[:depth_sign] * door_thk_inch)
 
-        leaf_specs(door_type, u0, u1, v0, v1).map do |lu0, lv0, lu1, lv1|
+        leaf_specs(door_type, u0, u1, v0, v1).each_with_index.map do |(lu0, lv0, lu1, lv1), leaf_idx|
           p0 = BodyBlock.point_on_frame(frame, door_attached_val, lu0, lv0)
           p1 = BodyBlock.point_on_frame(frame, door_outer_val, lu1, lv1)
           group = BodyBlock.create_box(model.active_entities, p0, p1)
@@ -93,10 +93,12 @@ module Sufx
 
           origin_p0 = BodyBlock.point_on_frame(frame, body_front_val, lu0, lv0)
           origin_p1 = BodyBlock.point_on_frame(frame, body_front_val, lu1, lv1)
+          leaf_side = door_type == :double ? (leaf_idx.zero? ? 'left' : 'right') : ''
 
           Attrs.set_all(comp,
                          'block_type' => 'door',
                          'door_type' => door_type.to_s,
+                         'door_leaf_side' => leaf_side,
                          'door_thk' => door_thk_mm,
                          'body_gap' => body_gap_mm,
                          'gap_top' => Constants::DEFAULT_DOOR_GAP,

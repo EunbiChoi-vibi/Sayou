@@ -13,6 +13,7 @@ module Sufx
       tools/scale_tool
       commands/merge
       commands/divide
+      commands/door_lines
       commands/door_create
       commands/door_gap
       commands/base_leg

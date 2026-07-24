@@ -106,6 +106,10 @@ module Sufx
         BodyBlock.redefine_box!(door,
                                  BodyBlock.point_on_frame(frame, door_attached_val, u0, v0),
                                  BodyBlock.point_on_frame(frame, door_outer_val, u1, v1))
+
+        door_type = Attrs.get(door, 'door_type', '')
+        leaf_side = Attrs.get(door, 'door_leaf_side', '')
+        DoorLines.draw!(door, frame, door_outer_val, u0, u1, v0, v1, door_type, leaf_side)
       end
     end
   end
