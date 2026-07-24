@@ -1,8 +1,9 @@
 module Sufx
   module Commands
     # 도어 리프 전면에 좌경/우경/반반/서랍 타입을 구분하는 표시선을 그린다.
-    # 실제 지오메트리를 깎지는 않고(숨김 처리된 Edge), 힌지/타입을 시각적으로 구분하기
-    # 위한 가이드선이다 — Hidden Geometry를 켜면 보인다.
+    # 실제 지오메트리를 깎지는 않는 순수 Edge이며, 숨김 처리하지 않고 항상 보이게
+    # 둔다. SUFX_DOORLINE 태그(§core/tag_manager.rb)에 Center 라인 스타일을
+    # 지정해두어(중간중간 끊어지는 1점쇄선) 일반 모델 선과 구분되는 표시선으로 보인다.
     #
     # Door Create/Door Gap이 도어 박스를 (재)생성할 때마다 이 메서드도 같이 호출해야
     # 한다 — redefine_box!/fill_box_faces가 entities를 clear!하기 때문에, 표시선도
@@ -42,7 +43,6 @@ module Sufx
           Array(entities.add_line(a, b)).each do |edge|
             next unless edge.is_a?(Sketchup::Edge)
 
-            edge.hidden = true
             TagManager.assign(model, edge, "#{Constants::TAG_DOOR_FOLDER}/#{Constants::TAG_DOORLINE}")
           end
         end

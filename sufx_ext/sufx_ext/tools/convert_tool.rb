@@ -84,8 +84,8 @@ module Sufx
 
     TINT_COLOR = Sketchup::Color.new(70, 200, 120, 70).freeze
     GRID_LINE_COLOR = Sketchup::Color.new(0, 190, 210).freeze
-    LABEL_H_COLOR = 'red'.freeze  # 열(가로 폭) 라벨
-    LABEL_V_COLOR = 'blue'.freeze # 행(세로 높이) 라벨
+    LABEL_H_COLOR = Sketchup::Color.new(219, 39, 119).freeze # 열(가로 폭) 라벨 · 마젠타
+    LABEL_V_COLOR = Sketchup::Color.new(22, 163, 74).freeze  # 행(세로 높이) 라벨 · 그린
 
     def draw(view)
       return if @group.deleted?
@@ -136,38 +136,72 @@ module Sufx
       end
     end
 
-    # 상단 바깥쪽에 열(칸) 폭 치수(빨강), 우측 바깥쪽에 행 높이 치수(파랑)를 2D 텍스트로 그린다.
-    # 배경 pill 없이 색상만으로 구분한다 — 예전에 배경 pill을 같이 그렸을 때 텍스트가 안
-    # 보이던 문제가 있어(배경이 텍스트를 덮는 렌더링 순서 문제로 추정) 배경을 아예 뺐다.
+    # 상단 바깥쪽에 열(칸) 폭 치수(마젠타 핏 라벨 + 경계점 마커),
+    # 우측 바깥쪽에 행 높이 치수(그린 핏 라벨 + 경계점 마커)를 그린다.
+    # 배경/텍스트 모두 screen-space 2D(draw2d/draw_text 고정좌표)로 그려서
+    # 3D 깊이버퍼 영향을 받지 않게 한다 — 이전에 3D 월드좌표로 배경을 그렸을 때
+    # 배경이 텍스트를 가리거나 흐리게 보이던 문제(z-fighting 계열)를 원천적으로 피한다.
     def draw_dimension_labels(view, face, cell_w, cell_h)
       origin = face.origin.offset(lift_vector(face, GRID_OFFSET_MM))
 
-      top_offset = face.v_axis.clone
-      top_offset.length = [cell_h.to_f * 0.06, 0.3].max
+      (0..@cols).each do |c|
+        point = origin.offset(face.u_axis, c * cell_w).offset(face.v_axis, face.height)
+        draw_marker(view, point, LABEL_H_COLOR)
+      end
       (0...@cols).each do |c|
-        point = origin
-                .offset(face.u_axis, (c + 0.5) * cell_w)
-                .offset(face.v_axis, face.height)
-                .offset(top_offset)
-        draw_label_text(view, point, format('%.0f', Units.inch_to_mm(cell_w)), LABEL_H_COLOR)
+        point = origin.offset(face.u_axis, (c + 0.5) * cell_w).offset(face.v_axis, face.height)
+        draw_pill_label(view, point, format('%.0f', Units.inch_to_mm(cell_w)), LABEL_H_COLOR, dy: -20)
       end
 
-      right_offset = face.u_axis.clone
-      right_offset.length = [cell_w.to_f * 0.06, 0.3].max
+      (0..@rows).each do |r|
+        point = origin.offset(face.v_axis, r * cell_h).offset(face.u_axis, face.width)
+        draw_marker(view, point, LABEL_V_COLOR)
+      end
       (0...@rows).each do |r|
-        point = origin
-                .offset(face.v_axis, (r + 0.5) * cell_h)
-                .offset(face.u_axis, face.width)
-                .offset(right_offset)
-        draw_label_text(view, point, format('%.0f', Units.inch_to_mm(cell_h)), LABEL_V_COLOR)
+        point = origin.offset(face.v_axis, (r + 0.5) * cell_h).offset(face.u_axis, face.width)
+        draw_pill_label(view, point, format('%.0f', Units.inch_to_mm(cell_h)), LABEL_V_COLOR, dx: 26)
       end
     end
 
-    def draw_label_text(view, point, text, color)
+    MARKER_HALF_PX = 5
+
+    # 경계점(칸 나누는 선이 상/우 테두리와 만나는 점)에 작은 정사각 마커를 찍는다.
+    def draw_marker(view, point3d, color)
+      screen = view.screen_coords(point3d)
+      return if screen.nil? || screen.z < 0 # 카메라 뒤쪽(투영 실패)이면 스킵
+
+      x, y = screen.x, screen.y
+      h = MARKER_HALF_PX
+      quad = [[x - h, y - h, 0], [x + h, y - h, 0], [x + h, y + h, 0], [x - h, y + h, 0]]
       view.drawing_color = color
-      view.draw_text(point, text)
+      view.draw2d(GL_QUADS, quad)
     rescue StandardError => e
-      warn "[SUFX] draw_text 실패: #{e.message}"
+      warn "[SUFX] draw_marker 실패: #{e.message}"
+    end
+
+    # point3d를 화면 좌표로 투영한 뒤, 그 위치에서 (dx,dy) 픽셀만큼 띄워서
+    # 색상 배경 핏(pill) + 흰색 텍스트를 screen-space 2D로 그린다.
+    def draw_pill_label(view, point3d, text, color, dx: 0, dy: 0)
+      screen = view.screen_coords(point3d)
+      return if screen.nil? || screen.z < 0
+
+      x = screen.x + dx
+      y = screen.y + dy
+      pad_x, pad_y = 8, 5
+      text_w = [text.length * 8, 16].max
+      text_h = 14
+
+      quad = [
+        [x - (text_w / 2) - pad_x, y - (text_h / 2) - pad_y, 0],
+        [x + (text_w / 2) + pad_x, y - (text_h / 2) - pad_y, 0],
+        [x + (text_w / 2) + pad_x, y + (text_h / 2) + pad_y, 0],
+        [x - (text_w / 2) - pad_x, y + (text_h / 2) + pad_y, 0]
+      ]
+      view.drawing_color = color
+      view.draw2d(GL_QUADS, quad)
+      view.draw_text([x - (text_w / 2), y - (text_h / 2)], text, color: 'white', bold: true)
+    rescue StandardError => e
+      warn "[SUFX] draw_pill_label 실패: #{e.message}"
     end
 
     # face.normal 방향으로 mm만큼 띄운 벡터를 만든다(z-fighting 방지용 공용 헬퍼).

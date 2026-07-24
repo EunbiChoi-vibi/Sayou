@@ -74,8 +74,21 @@ module Sufx
       end
 
       ensure_tag(model, Constants::TAG_DOOR, folder_name: Constants::TAG_DOOR_FOLDER)
-      ensure_tag(model, Constants::TAG_DOORLINE, folder_name: Constants::TAG_DOOR_FOLDER)
+      doorline_tag = ensure_tag(model, Constants::TAG_DOORLINE, folder_name: Constants::TAG_DOOR_FOLDER)
+      apply_center_line_style(doorline_tag)
       ensure_tag(model, Constants::TAG_HIDDEN, folder_name: Constants::TAG_DOOR_FOLDER)
+    end
+
+    # 도어 표시선(SUFX_DOORLINE) 태그를 중간중간 끊어지는 1점쇄선(Center) 스타일로
+    # 지정한다. Layer#line_style=는 SketchUp 2021+에서만 지원되므로, 없는 버전에서는
+    # 조용히 건너뛴다(선 자체는 실선으로라도 보인다).
+    def apply_center_line_style(tag)
+      return unless tag && tag.respond_to?(:line_style=)
+
+      center = Sketchup::Layer.constants.find { |c| c.to_s.include?('CENTER') }
+      tag.line_style = Sketchup::Layer.const_get(center) if center
+    rescue StandardError => e
+      warn "[SUFX] apply_center_line_style failed: #{e.message}"
     end
 
     # entity에 태그를 할당한다. path는 "SUFX_BODY" 또는 "DOOR/SUFX_DOOR" 형태(마지막 세그먼트만 사용).
