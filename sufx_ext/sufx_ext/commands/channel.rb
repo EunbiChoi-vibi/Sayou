@@ -188,8 +188,11 @@ module Sufx
       end
 
       # shrunk_front_val(파낸 새 전면)~front_val(원래 전면) 구간을 기본 두께로 채우고,
-      # 그 중 아래쪽 CHANNEL_LIP_H_MM 구간만 원래 전면보다 CHANNEL_LIP_EXTRA_MM만큼 더
-      # 튀어나오게(단턱) 한다.
+      # 그 중 아래쪽 CHANNEL_LIP_H_MM 구간에는 front_val~lip_front_val(=front_val +
+      # CHANNEL_LIP_EXTRA_MM) 구간만 얇게 덧붙인다(단턱). lip을 shrunk_front_val부터
+      # 다시 채우면 base와 동일한 shrunk_front_val~front_val 구간을 이중으로 덮어
+      # 서로 다른 그룹의 매스가 겹치므로(면 겹침 원인), lip은 반드시 base의 전면
+      # (front_val)에서 시작해야 한다.
       def add_bracket(model, entities, frame, shrunk_front_val, front_val, u_a, u_b, v_lo, v_hi)
         base = BodyBlock.create_box(entities,
                                      BodyBlock.point_on_frame(frame, shrunk_front_val, u_a, v_lo),
@@ -202,7 +205,7 @@ module Sufx
         lip_front_val = front_val + (frame[:depth_sign] * lip_extra)
 
         lip = BodyBlock.create_box(entities,
-                                    BodyBlock.point_on_frame(frame, shrunk_front_val, u_a, v_lo),
+                                    BodyBlock.point_on_frame(frame, front_val, u_a, v_lo),
                                     BodyBlock.point_on_frame(frame, lip_front_val, u_b, lip_v_hi))
         tag_groove(model, lip)
       end

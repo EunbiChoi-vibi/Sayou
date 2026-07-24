@@ -22,6 +22,16 @@
     callRuby('onConvertClick');
   });
 
+  // Base/Leg 버튼은 Convert 인터랙티브 툴이 켜져 있을 때만 활성화된다
+  // (updateConvertToolState가 disabled를 풀어준다). 클릭하면 그 툴 인스턴스의
+  // B/L 키 토글과 동일하게 동작한다.
+  document.getElementById('btn-convert-base').addEventListener('click', function () {
+    callRuby('onConvertBaseLegClick', 'base');
+  });
+  document.getElementById('btn-convert-leg').addEventListener('click', function () {
+    callRuby('onConvertBaseLegClick', 'leg');
+  });
+
   document.getElementById('btn-merge').addEventListener('click', function () {
     callRuby('onMergeClick');
   });
@@ -111,5 +121,16 @@
   // 셀 치수는 여기 패널 쪽에서 항상 보이도록 표시한다.
   window.updateConvertDims = function (text) {
     document.getElementById('convert-dim-line').textContent = text || '';
+  };
+
+  // Convert 툴 activate/deactivate 시 호출 — active가 아니면 Base/Leg 버튼을 비활성화하고,
+  // active면 활성화하면서 현재 켜진 타입(supportType: 'none'/'base'/'leg')을 강조 표시한다.
+  window.updateConvertToolState = function (active, supportType) {
+    var baseBtn = document.getElementById('btn-convert-base');
+    var legBtn = document.getElementById('btn-convert-leg');
+    baseBtn.disabled = !active;
+    legBtn.disabled = !active;
+    baseBtn.classList.toggle('active', !!active && supportType === 'base');
+    legBtn.classList.toggle('active', !!active && supportType === 'leg');
   };
 })();

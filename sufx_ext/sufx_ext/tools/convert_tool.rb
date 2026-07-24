@@ -10,6 +10,12 @@ module Sufx
   # 나머지 높이로만 나뉘며 Base(전체 풋프린트 지지대) 또는 Leg(D40 원기둥 4개 + 10T
   # 전면 가림막)가 함께 생성된다.
   class SufxConvertTool
+    class << self
+      # 패널의 Base/Leg 버튼이 "지금 활성화된 Convert 툴 인스턴스"에 클릭을 전달할 수
+      # 있도록, 현재 활성 인스턴스를 클래스 레벨에서 추적한다(activate/deactivate에서 설정).
+      attr_accessor :active_instance
+    end
+
     KEY_TAB = 9
     KEY_RETURN = 13
     KEY_B = 'B'.ord
@@ -60,19 +66,24 @@ module Sufx
     end
 
     def activate
+      self.class.active_instance = self
       Sketchup.status_text = status_text
       Sketchup.active_model.active_view.invalidate
       push_dimensions_to_panel
+      push_tool_state_to_panel
     end
 
     def deactivate(view)
+      self.class.active_instance = nil if self.class.active_instance == self
       view.invalidate
       push_dimensions_to_panel(clear: true)
+      push_tool_state_to_panel
     end
 
     def resume(_view)
       Sketchup.status_text = status_text
       push_dimensions_to_panel
+      push_tool_state_to_panel
     end
 
     def onCancel(_reason, _view)
@@ -105,8 +116,18 @@ module Sufx
       end
       Sketchup.status_text = status_text
       push_dimensions_to_panel
+      push_tool_state_to_panel
       view.invalidate
       true
+    end
+
+    # 패널의 Base/Leg 버튼 클릭(마우스)에서 호출 — B/L 키와 동일하게 토글하고 화면을 갱신한다.
+    def toggle_support_from_panel(type)
+      toggle_support(type)
+      Sketchup.status_text = status_text
+      push_dimensions_to_panel
+      push_tool_state_to_panel
+      Sketchup.active_model.active_view.invalidate
     end
 
     # Base/Leg는 둘 중 하나만 켤 수 있다 — 같은 타입을 다시 누르면 끄고,
@@ -314,6 +335,18 @@ module Sufx
       dialog.execute_script("updateConvertDims(#{text.to_json})")
     rescue StandardError => e
       warn "[SUFX] push_dimensions_to_panel 실패: #{e.message}"
+    end
+
+    # 패널의 Base/Leg 버튼 활성/비활성 및 강조 상태를 갱신한다 — Convert 툴이 active일
+    # 때만 버튼을 누를 수 있게 하고, 켜진 타입(base/leg)을 버튼에 강조 표시한다.
+    def push_tool_state_to_panel
+      dialog = Sufx::UIPanel.dialog
+      return unless dialog && dialog.visible?
+
+      active = self.class.active_instance == self
+      dialog.execute_script("updateConvertToolState(#{active}, #{@support_type.to_s.to_json})")
+    rescue StandardError => e
+      warn "[SUFX] push_tool_state_to_panel 실패: #{e.message}"
     end
 
     def current_face

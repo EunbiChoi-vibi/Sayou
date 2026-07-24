@@ -46,6 +46,11 @@ module Sufx
         notify_result(dialog, ok, msg)
       end
 
+      dialog.add_action_callback('onConvertBaseLegClick') do |_ctx, type|
+        tool = SufxConvertTool.active_instance
+        tool&.toggle_support_from_panel(type.to_sym)
+      end
+
       dialog.add_action_callback('onMergeClick') do |_ctx|
         ok, msg = Commands::Merge.run!
         notify_result(dialog, ok, msg)
