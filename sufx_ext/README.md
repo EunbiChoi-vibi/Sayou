@@ -47,8 +47,6 @@ Ruby 문법 검사(`ruby -c`)만 전체 파일에 대해 통과시켰습니다. 
 - **Scale 툴의 "측판 두께 18T 자동 복원"은 미구현(no-op)** 입니다. 현재 바디/도어가
   단일 솔리드 박스라 "측판"이라는 개념이 아직 없기 때문입니다. 바디를 실제 18T 패널
   조합으로 고도화한 뒤 `tools/scale_tool.rb`의 `rebuild_panel_thickness!`를 구현해야 합니다.
-- **툴바/메뉴 아이콘 이미지가 없습니다.** `sufx_ext/html/icons/`에 16x24px 아이콘(PNG)을
-  추가하고 `main.rb`의 `small_icon`/`large_icon` 경로와 맞추면 됩니다.
 - Merge의 "완전 인접" 판정은 축 하나가 맞닿고 나머지 두 축이 겹치는지로 근사했습니다
   (`core/body_block.rb#bbox_touches?`). 부분 겹침도 인접으로 허용되는 점에 유의하세요.
 
