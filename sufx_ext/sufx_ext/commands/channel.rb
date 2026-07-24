@@ -135,16 +135,21 @@ module Sufx
         bands
       end
 
-      # 밴드가 없는 구간에서 좌/우 측판을 원래 전면까지 튀어나오게 채운다.
+      # 밴드가 없는 구간에서 좌/우 측판을, 밴드 구간의 단턱(lip)과 동일하게 원래
+      # 전면보다 CHANNEL_LIP_EXTRA_MM만큼 더 튀어나오게 채운다 — 그래야 밴드 유무와
+      # 무관하게 측판 전면선이 하나로 이어져 보인다.
       def add_side_panel_patch(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
+        lip_extra = Units.mm_to_inch(Constants::CHANNEL_LIP_EXTRA_MM)
+        patch_front_val = front_val + (frame[:depth_sign] * lip_extra)
+
         left = BodyBlock.create_box(entities,
                                      BodyBlock.point_on_frame(frame, shrunk_front_val, u_min, v_lo),
-                                     BodyBlock.point_on_frame(frame, front_val, u_min + panel_thk, v_hi))
+                                     BodyBlock.point_on_frame(frame, patch_front_val, u_min + panel_thk, v_hi))
         tag_groove(model, left)
 
         right = BodyBlock.create_box(entities,
                                       BodyBlock.point_on_frame(frame, shrunk_front_val, u_max - panel_thk, v_lo),
-                                      BodyBlock.point_on_frame(frame, front_val, u_max, v_hi))
+                                      BodyBlock.point_on_frame(frame, patch_front_val, u_max, v_hi))
         tag_groove(model, right)
       end
 

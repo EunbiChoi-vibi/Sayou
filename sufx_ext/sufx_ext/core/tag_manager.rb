@@ -75,18 +75,28 @@ module Sufx
 
       ensure_tag(model, Constants::TAG_DOOR, folder_name: Constants::TAG_DOOR_FOLDER)
       doorline_tag = ensure_tag(model, Constants::TAG_DOORLINE, folder_name: Constants::TAG_DOOR_FOLDER)
-      apply_center_line_style(doorline_tag)
+      apply_center_line_style(model, doorline_tag)
       ensure_tag(model, Constants::TAG_HIDDEN, folder_name: Constants::TAG_DOOR_FOLDER)
     end
 
     # 도어 표시선(SUFX_DOORLINE) 태그를 중간중간 끊어지는 1점쇄선(Center) 스타일로
-    # 지정한다. Layer#line_style=는 SketchUp 2021+에서만 지원되므로, 없는 버전에서는
+    # 지정한다. 라인 스타일은 Layer의 상수가 아니라 모델의 Sketchup::LineStyles
+    # 컬렉션에 이름으로 등록되어 있다(model.line_styles["이름"] -> Sketchup::LineStyle
+    # -> tag.line_style=). SketchUp 2021+에서만 지원되므로, 없는 버전/이름을 못 찾으면
     # 조용히 건너뛴다(선 자체는 실선으로라도 보인다).
-    def apply_center_line_style(tag)
+    def apply_center_line_style(model, tag)
       return unless tag && tag.respond_to?(:line_style=)
+      return unless model.respond_to?(:line_styles)
 
-      center = Sketchup::Layer.constants.find { |c| c.to_s.include?('CENTER') }
-      tag.line_style = Sketchup::Layer.const_get(center) if center
+      styles = model.line_styles
+      names = styles.respond_to?(:names) ? styles.names.to_a : []
+      match = names.find { |n| n.to_s =~ /center/i } ||
+              names.find { |n| n.to_s =~ /dash.?dot/i } ||
+              names.find { |n| n.to_s =~ /dash/i }
+      return unless match
+
+      style = styles[match]
+      tag.line_style = style if style
     rescue StandardError => e
       warn "[SUFX] apply_center_line_style failed: #{e.message}"
     end

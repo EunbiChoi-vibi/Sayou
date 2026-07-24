@@ -113,10 +113,10 @@ module Sufx
         end
       end
 
-      # 챗넬이 없으면 [v0,v1] 구간 하나. 챗넬이 있으면 밴드(Channel.band_ranges) 바로
-      # 아래에서 CHANNEL_DOOR_CLEARANCE_MM만큼 띄운다(모든 도어 타입 공통).
+      # 챗넬이 없으면 [v0,v1] 구간 하나. 챗넬이 있으면 밴드(Channel.band_ranges)의
+      # 윗쪽 끝선에서 CHANNEL_DOOR_CLEARANCE_MM만큼 띄운다(모든 도어 타입 공통).
       # 서랍이고 밴드가 2개(상+중챗넬)면, 밴드로 나뉜 구간마다 서랍을 하나씩 만들도록
-      # [v0,v1] 구간을 2개로 쪼갠다.
+      # [v0,v1] 구간을 2개로 쪼갠다(각 구간도 자기 위 밴드의 윗쪽 끝선 기준).
       def door_v_segments(door_type, channel_mode, v_min, v_max, gaps)
         v0 = v_min + Units.mm_to_inch(gaps[:bottom])
         v1 = v_max - Units.mm_to_inch(gaps[:top])
@@ -127,14 +127,14 @@ module Sufx
         clearance = Units.mm_to_inch(Constants::CHANNEL_DOOR_CLEARANCE_MM)
 
         unless door_type == :drawer && bands.size >= 2
-          topmost_lo = bands.max_by { |lo, _hi| lo }.first
-          return [[v0, topmost_lo - clearance]]
+          topmost_hi = bands.max_by { |lo, _hi| lo }.last
+          return [[v0, topmost_hi - clearance]]
         end
 
         segments = []
         cursor = v0
-        bands.each do |lo, hi|
-          segments << [cursor, lo - clearance]
+        bands.each do |_lo, hi|
+          segments << [cursor, hi - clearance]
           cursor = hi
         end
         segments
