@@ -22,13 +22,6 @@
     callRuby('onConvertClick');
   });
 
-  document.getElementById('btn-base').addEventListener('click', function () {
-    callRuby('onBaseLegClick', 'base', num('input-height', 100));
-  });
-  document.getElementById('btn-leg').addEventListener('click', function () {
-    callRuby('onBaseLegClick', 'leg', num('input-height', 100));
-  });
-
   document.getElementById('btn-merge').addEventListener('click', function () {
     callRuby('onMergeClick');
   });

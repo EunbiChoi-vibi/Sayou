@@ -46,11 +46,6 @@ module Sufx
         notify_result(dialog, ok, msg)
       end
 
-      dialog.add_action_callback('onBaseLegClick') do |_ctx, type, height_mm|
-        ok, msg = Commands::BaseLeg.run!(type.to_sym, height_mm.to_f)
-        notify_result(dialog, ok, msg)
-      end
-
       dialog.add_action_callback('onMergeClick') do |_ctx|
         ok, msg = Commands::Merge.run!
         notify_result(dialog, ok, msg)

@@ -29,10 +29,7 @@
 3. 바디블럭을 선택하고 DOOR 섹션의 좌경/우경/반반/서랍 버튼으로 도어를 답니다.
    (DOOR THK/BODY GAP 값은 패널 상단 입력 필드에서 조정, 이후 생성되는 도어부터 적용됩니다.)
 4. 도어를 선택한 상태에서 DOOR GAP 섹션의 방향 버튼으로 4방향 갭을 조정하거나 R로 리셋합니다.
-5. (레거시) 이미 생성된 바디블럭을 선택하고 패널의 Base/Leg + 높이(mm) 버튼으로도
-   후처리로 지지대를 추가할 수 있습니다(Leg는 18T 가림판 자동 생성) — Convert
-   통합 흐름(1번)과는 별개의 독립적인 수단입니다.
-6. 하부장 바디블럭을 선택하고 CHANNEL 섹션에서 없음/상/상+중을 지정합니다.
+5. 하부장 바디블럭을 선택하고 CHANNEL 섹션에서 없음/상/상+중을 지정합니다.
 7. `Extensions > SUFX Tools > SUFX Scale (6-핸들)`로 SUFX 블럭 1개를 선택한 뒤,
    바운딩박스 6개 면-중앙 그립을 드래그해 축별로만 크기를 조정할 수 있습니다.
 
@@ -70,7 +67,7 @@ sufx_ext/
 │   ├── convert_tool.rb      # Convert 인터랙티브 그리드 (Sketchup::Tool)
 │   └── scale_tool.rb        # 6-핸들 커스텀 Scale 툴
 ├── commands/
-│   ├── merge.rb / divide.rb / door_create.rb / door_gap.rb / base_leg.rb / channel.rb
+│   ├── merge.rb / divide.rb / door_create.rb / door_gap.rb / door_lines.rb / channel.rb
 ├── core/
 │   ├── body_block.rb        # 박스 지오메트리 유틸 (전 커맨드 공용)
 │   ├── dynamic_component.rb # SUFX 속성 헬퍼 + DC 확장 지점

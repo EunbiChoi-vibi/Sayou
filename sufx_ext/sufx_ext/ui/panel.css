@@ -97,10 +97,6 @@ hr {
   background: #275bc4;
 }
 
-.btn-toggle {
-  font-weight: 600;
-}
-
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;

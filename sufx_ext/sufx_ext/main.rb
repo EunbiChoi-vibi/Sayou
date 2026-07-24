@@ -16,7 +16,6 @@ module Sufx
       commands/door_lines
       commands/door_create
       commands/door_gap
-      commands/base_leg
       commands/channel
       ui/panel_controller
     ].each { |rel| require File.join(base, "#{rel}.rb") }
