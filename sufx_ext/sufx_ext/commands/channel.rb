@@ -87,8 +87,8 @@ module Sufx
 
         band_h = Units.mm_to_inch(Constants::CHANNEL_BAND_H_MM)
 
-        # CH1: 상판 바로 아래
-        top_hi = v_max - panel_thk
+        # CH1: 바디 맨 위 끝선에 맞춰서(상판 두께만큼 인셋하지 않고 v_max까지 꽉 채움)
+        top_hi = v_max
         top_lo = top_hi - band_h
         add_bracket(model, definition.entities, frame, shrunk_front_val, front_val, u_min, u_max, top_lo, top_hi)
 

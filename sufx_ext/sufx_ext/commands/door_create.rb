@@ -77,7 +77,11 @@ module Sufx
 
         depth_min, depth_max = BodyBlock.axis_range(combined, frame[:depth_axis])
         body_front_val = frame[:depth_sign].positive? ? depth_max : depth_min
-        door_attached_val = body_front_val + (frame[:depth_sign] * body_gap_inch)
+        # §4.7: 챗넬이 있으면 combined(=바디 실측 바운드)의 전면이 이미 챗넬 브라켓
+        # 돌출분(단턱 포함)만큼 앞으로 나와 있으므로, body_gap을 더 얹으면 그만큼 간격이
+        # 더 벌어진다. 챗넬이 있을 때는 그 돌출면에 바로(0mm) 붙인다.
+        effective_gap_inch = channel_mode.to_i.zero? ? body_gap_inch : 0.0
+        door_attached_val = body_front_val + (frame[:depth_sign] * effective_gap_inch)
         door_outer_val = door_attached_val + (frame[:depth_sign] * door_thk_inch)
 
         leaf_specs(door_type, u0, u1, v0, v1).map do |lu0, lv0, lu1, lv1|
