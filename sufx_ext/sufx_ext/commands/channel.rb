@@ -19,8 +19,10 @@ module Sufx
     # 방식이다. 최초 1회 캡처해둔 channel_orig_bounds(파내기 전의 전체 바디 바운드)를
     # 기준으로 매 호출마다 바디 내부 전체(쉘 + 브라켓)를 다시 만들어야, CH1<->CH2<->없음을
     # 오갈 때 깊이가 중첩 축소되지 않고 항상 같은 기준에서 재계산된다.
-    # create_drawer(commands/door_create.rb의 :drawer 타입)는 channel_mode를 조회해
-    # CHANNEL_CLEARANCE만큼 서랍 상단 높이를 축소한다 — 서랍 연동 요구사항(§4.7) 충족.
+    # door_create.rb는 band_ranges(v_min, v_max, channel_mode)를 그대로 재사용해
+    # 챗넬 바로 아래에서 CHANNEL_DOOR_CLEARANCE_MM만큼 띄운 자리에 도어/서랍을
+    # 만든다(모든 도어 타입 공통) — 서랍이고 밴드가 2개(CH2)면 밴드로 나뉜 구간마다
+    # 서랍을 하나씩(총 2개) 만든다 — 서랍 연동 요구사항(§4.7) 충족.
     module Channel
       module_function
 
@@ -89,18 +91,7 @@ module Sufx
         shrunk_max = BodyBlock.point_on_frame(frame, back_val, u_max, v_max)
         BodyBlock.build_shell_from_bounds(definition.entities, shrunk_min, shrunk_max, front_normal, panel_thk, back_thk)
 
-        band_h = Units.mm_to_inch(Constants::CHANNEL_BAND_H_MM)
-
-        # CH1: 바디 맨 위 끝선에 맞춰서(상판 두께만큼 인셋하지 않고 v_max까지 꽉 채움)
-        top_hi = v_max
-        top_lo = top_hi - band_h
-        bands = [[top_lo, top_hi]]
-
-        # CH2: CH1 + 본체 세로 중앙에 브라켓 하나 더
-        if mode.to_i >= 2
-          mid = (v_min + v_max) / 2.0
-          bands << [mid - (band_h / 2.0), mid + (band_h / 2.0)]
-        end
+        bands = band_ranges(v_min, v_max, mode)
 
         bands.each do |lo, hi|
           add_bracket(model, definition.entities, frame, shrunk_front_val, front_val, u_min, u_max, lo, hi)
@@ -121,6 +112,27 @@ module Sufx
 
         add_side_panel_patch(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk,
                               u_min, u_max, cursor, v_max)
+      end
+
+      # 챗넬 밴드(브라켓이 들어가는 v구간) 목록을 반환한다. v_min/v_max는 바디의
+      # 폭/높이축과 무관한 세로(v)축 범위(인치). door_create.rb가 도어/서랍 사이즈를
+      # 챗넬 기준으로 잘라낼 때도 이 메서드로 동일한 밴드 좌표를 재사용한다.
+      #   CH1(mode 1): 바디 맨 위 끝선(v_max)부터 CHANNEL_BAND_H_MM만큼.
+      #   CH2(mode 2): CH1 + 세로 중앙에 밴드 하나 더.
+      def band_ranges(v_min, v_max, mode)
+        return [] if mode.to_i.zero?
+
+        band_h = Units.mm_to_inch(Constants::CHANNEL_BAND_H_MM)
+        top_hi = v_max
+        top_lo = top_hi - band_h
+        bands = [[top_lo, top_hi]]
+
+        if mode.to_i >= 2
+          mid = (v_min + v_max) / 2.0
+          bands << [mid - (band_h / 2.0), mid + (band_h / 2.0)]
+        end
+
+        bands
       end
 
       # 밴드가 없는 구간에서 좌/우 측판을 원래 전면까지 튀어나오게 채운다.

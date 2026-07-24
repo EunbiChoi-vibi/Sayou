@@ -14,8 +14,8 @@ module Sufx
     CHANNEL_LIP_H_MM     = 10.0 # mm, 브라켓 하단부 중 추가로 더 튀어나오는 구간의 높이
     CHANNEL_LIP_EXTRA_MM = 4.0  # mm, 하단 구간이 나머지(기본 돌출)보다 더 튀어나오는 두께
 
-    # 서랍 상단이 챗넬 브라켓과 부딪히지 않도록 줄여야 하는 높이 — 브라켓 세로 폭과 동일하게 둔다.
-    CHANNEL_CLEARANCE = { 0 => 0.0, 1 => CHANNEL_BAND_H_MM, 2 => CHANNEL_BAND_H_MM }.freeze
+    # mm, 챗넬 밴드 바로 아래에서 도어/서랍 상단이 추가로 띄워야 하는 여유(모든 도어 타입 공통).
+    CHANNEL_DOOR_CLEARANCE_MM = 15.0
 
     SCALE_HANDLE_AXES = [:x, :y, :z].freeze
 

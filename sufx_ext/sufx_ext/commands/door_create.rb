@@ -67,24 +67,20 @@ module Sufx
         v_min, v_max = BodyBlock.axis_range(combined, frame[:v_sym])
         u0 = u_min + Units.mm_to_inch(gaps[:left])
         u1 = u_max - Units.mm_to_inch(gaps[:right])
-        v0 = v_min + Units.mm_to_inch(gaps[:bottom])
-        v1 = v_max - Units.mm_to_inch(gaps[:top])
 
-        if door_type == :drawer
-          clearance = Units.mm_to_inch(Constants::CHANNEL_CLEARANCE[channel_mode] || 0)
-          v1 = v_max - clearance # §4.7: 챗넬 홈 높이만큼 서랍 상단 축소
-        end
+        v_segments = door_v_segments(door_type, channel_mode, v_min, v_max, gaps)
 
-        depth_min, depth_max = BodyBlock.axis_range(combined, frame[:depth_axis])
-        body_front_val = frame[:depth_sign].positive? ? depth_max : depth_min
-        # §4.7: 챗넬이 있으면 combined(=바디 실측 바운드)의 전면이 이미 챗넬 브라켓
-        # 돌출분(단턱 포함)만큼 앞으로 나와 있으므로, body_gap을 더 얹으면 그만큼 간격이
-        # 더 벌어진다. 챗넬이 있을 때는 그 돌출면에 바로(0mm) 붙인다.
+        body_front_val = door_body_front_val(first_body, combined, frame, channel_mode)
+        # §4.7: 챗넬이 있으면 combined(=바디 실측 바운드)에는 챗넬 브라켓 돌출분(단턱 포함)이
+        # 섞여 있어 그대로 쓰면 도어가 그만큼 더 앞으로 튀어나온다. 챗넬이 있을 때는 파내기
+        # 전 원래 전면(channel_orig_bounds)을 기준으로 삼고, body_gap 없이 바로(0mm) 붙인다.
         effective_gap_inch = channel_mode.to_i.zero? ? body_gap_inch : 0.0
         door_attached_val = body_front_val + (frame[:depth_sign] * effective_gap_inch)
         door_outer_val = door_attached_val + (frame[:depth_sign] * door_thk_inch)
 
-        leaf_specs(door_type, u0, u1, v0, v1).each_with_index.map do |(lu0, lv0, lu1, lv1), leaf_idx|
+        specs = v_segments.flat_map { |sv0, sv1| leaf_specs(door_type, u0, u1, sv0, sv1) }
+
+        specs.each_with_index.map do |(lu0, lv0, lu1, lv1), leaf_idx|
           p0 = BodyBlock.point_on_frame(frame, door_attached_val, lu0, lv0)
           p1 = BodyBlock.point_on_frame(frame, door_outer_val, lu1, lv1)
           group = BodyBlock.create_box(model.active_entities, p0, p1)
@@ -115,6 +111,50 @@ module Sufx
           DoorGap.rebuild_door_geometry(comp)
           comp
         end
+      end
+
+      # 챗넬이 없으면 [v0,v1] 구간 하나. 챗넬이 있으면 밴드(Channel.band_ranges) 바로
+      # 아래에서 CHANNEL_DOOR_CLEARANCE_MM만큼 띄운다(모든 도어 타입 공통).
+      # 서랍이고 밴드가 2개(상+중챗넬)면, 밴드로 나뉜 구간마다 서랍을 하나씩 만들도록
+      # [v0,v1] 구간을 2개로 쪼갠다.
+      def door_v_segments(door_type, channel_mode, v_min, v_max, gaps)
+        v0 = v_min + Units.mm_to_inch(gaps[:bottom])
+        v1 = v_max - Units.mm_to_inch(gaps[:top])
+
+        bands = channel_mode.to_i.positive? ? Channel.band_ranges(v_min, v_max, channel_mode).sort_by(&:first) : []
+        return [[v0, v1]] if bands.empty?
+
+        clearance = Units.mm_to_inch(Constants::CHANNEL_DOOR_CLEARANCE_MM)
+
+        unless door_type == :drawer && bands.size >= 2
+          topmost_lo = bands.max_by { |lo, _hi| lo }.first
+          return [[v0, topmost_lo - clearance]]
+        end
+
+        segments = []
+        cursor = v0
+        bands.each do |lo, hi|
+          segments << [cursor, lo - clearance]
+          cursor = hi
+        end
+        segments
+      end
+
+      # 챗넬이 없으면 combined(바디 실측 바운드)의 전면을 그대로 쓴다. 챗넬이 있으면
+      # combined에는 챗넬 브라켓의 돌출분이 섞여 있어 쓸 수 없으므로, 파내기 전 원래
+      # 전면(channel_orig_bounds, §commands/channel.rb#origin_bounds)을 기준으로 삼는다.
+      def door_body_front_val(first_body, combined, frame, channel_mode)
+        if channel_mode.to_i.positive?
+          orig = Attrs.get(first_body, 'channel_orig_bounds', nil)
+          if orig.is_a?(Array) && orig.size == 6
+            d_a, = BodyBlock.axis_values(frame, Geom::Point3d.new(orig[0], orig[1], orig[2]))
+            d_b, = BodyBlock.axis_values(frame, Geom::Point3d.new(orig[3], orig[4], orig[5]))
+            return frame[:depth_sign].positive? ? [d_a, d_b].max : [d_a, d_b].min
+          end
+        end
+
+        depth_min, depth_max = BodyBlock.axis_range(combined, frame[:depth_axis])
+        frame[:depth_sign].positive? ? depth_max : depth_min
       end
 
       # door_type: :left/:right(단문), :double(반반, 2짝), :drawer(서랍) — 모두 박스 1~2개로 근사.

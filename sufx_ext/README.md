@@ -42,7 +42,7 @@ Ruby 문법 검사(`ruby -c`)만 전체 파일에 대해 통과시켰습니다. 
   `front_y = combined.min.y` 부분을 조정해야 합니다.
 - **Div H/Div V의 축 매핑은 추정값**입니다(H=Z축 분할/상하, V=X축 분할/좌우).
   명세서에 명시되어 있지 않아 `commands/divide.rb` 상단 주석에 가정을 남겨두었습니다.
-- **CHANNEL_CLEARANCE, 가림판 두께(18mm), 챗넬 홈 깊이(10mm), DOOR GAP STEP** 등은
+- **CHANNEL_DOOR_CLEARANCE_MM, 가림판 두께(18mm), 챗넬 홈 깊이(10mm), DOOR GAP STEP** 등은
   명세서에서도 "placeholder"로 명시한 값입니다. 실측 후 `core/constants.rb`에서 조정하세요.
 - **Scale 툴의 "측판 두께 18T 자동 복원"은 미구현(no-op)** 입니다. 현재 바디/도어가
   단일 솔리드 박스라 "측판"이라는 개념이 아직 없기 때문입니다. 바디를 실제 18T 패널
