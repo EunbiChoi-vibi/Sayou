@@ -1349,7 +1349,6 @@ function notionDateValue(prop) {
 const NOTION_MODULES = [
   { key: "schedule", label: "프로젝트별 공정표", dbStorageKey: "interior-dashboard-notion-db-schedule-v1", defaultDatabaseId: "033d7aff18d74536a2640b9f5190c672" },
   { key: "vendor", label: "공정별 거래처", dbStorageKey: "interior-dashboard-notion-db-vendor-v1", defaultDatabaseId: "28afc9d8c57b4b5c86d24f22e363781b" },
-  { key: "material", label: "자재 물량 계산기", dbStorageKey: "interior-dashboard-notion-db-material-v1", defaultDatabaseId: "582635b88ad4487c88692cbc697ed07f" },
   { key: "pipeline", label: "프로젝트 목록", dbStorageKey: "interior-dashboard-notion-db-pipeline-v1", defaultDatabaseId: "7523128efdd84be1936343c9e28d9fad" },
   { key: "proposal", label: "제안서", dbStorageKey: "interior-dashboard-notion-db-proposal-v1", defaultDatabaseId: NOTION_DB_PROPOSAL },
   { key: "estimate", label: "견적", dbStorageKey: "interior-dashboard-notion-db-estimate-v1", defaultDatabaseId: NOTION_DB_ESTIMATE },
@@ -3793,20 +3792,7 @@ function InteriorToolkit({ onBack }) {
       },
     }));
   }
-  function addItemsBulk(cat, newItems) {
-    setData((prev) => ({
-      ...prev,
-      quantity: {
-        ...prev.quantity,
-        categories: {
-          ...prev.quantity.categories,
-          [cat]: { ...prev.quantity.categories[cat], items: dedupeByKey([...prev.quantity.categories[cat].items, ...newItems], (it) => it.notionPageId || it.id) },
-        },
-      },
-    }));
-  }
   function removeItem(cat, id) {
-    const target = data.quantity.categories[cat]?.items.find((it) => it.id === id);
     setData((prev) => ({
       ...prev,
       quantity: {
@@ -3814,7 +3800,6 @@ function InteriorToolkit({ onBack }) {
         categories: { ...prev.quantity.categories, [cat]: { ...prev.quantity.categories[cat], items: prev.quantity.categories[cat].items.filter((it) => it.id !== id) } },
       },
     }));
-    if (target && target.notionPageId) materialNotionSync.archivePage(target.notionPageId);
   }
   function updateCategoryOptions(cat, field, value) {
     setData((prev) => ({
@@ -3916,59 +3901,6 @@ function InteriorToolkit({ onBack }) {
   }
 
   const activeMeta = CATEGORY_META.find((c) => c.key === activeCategory);
-
-  const materialNotionSync = useNotionAutoSync("interior-dashboard-notion-db-material-v1", "582635b88ad4487c88692cbc697ed07f", async (workerUrl, databaseId) => {
-    let pushed = 0, pulled = 0, updated = 0;
-    const projectName = data.quantity.projectName || "제목 없는 프로젝트";
-    const justPushedIds = [];
-    for (const catKey of CATEGORY_KEYS) {
-      const cs = data.quantity.categories[catKey];
-      const totalPyeong = categoryTotalPyeong(cs);
-      for (const item of cs.items) {
-        const qty = computeQty(item, totalPyeong, cs.options);
-        const props = {
-          "이름": notionTitleProp(item.name || "(이름 없음)"),
-          "카테고리": notionSelectProp(catKey),
-          "단위": notionTextProp(item.unit),
-          "필요수량": notionNumberProp(qty),
-          "프로젝트명": notionSelectProp(projectName),
-        };
-        if (item.notionPageId) {
-          await notionUpdatePageSafe(workerUrl, item.notionPageId, props);
-          updated++;
-        } else {
-          const page = await notionCreatePage(workerUrl, databaseId, props);
-          updateItem(catKey, item.id, "notionPageId", page.id);
-          justPushedIds.push(page.id);
-          pushed++;
-        }
-      }
-    }
-    const knownIds = new Set(justPushedIds);
-    CATEGORY_KEYS.forEach((k) => data.quantity.categories[k].items.forEach((it) => { if (it.notionPageId) knownIds.add(it.notionPageId); }));
-    const result = await notionQueryDatabase(workerUrl, databaseId, { page_size: 100 });
-    const additions = {};
-    (result.results || []).forEach((page) => {
-      if (knownIds.has(page.id)) return;
-      const props = page.properties;
-      const catName = notionPlainText(props["카테고리"]);
-      if (!CATEGORY_KEYS.includes(catName)) return;
-      const newItem = {
-        id: makeId(),
-        name: notionPlainText(props["이름"]),
-        unit: notionPlainText(props["단위"]) || "개",
-        mode: "fixed",
-        fixedQty: Number(notionPlainText(props["필요수량"])) || 0,
-        coef: 0,
-        loss: 0,
-        notionPageId: page.id,
-      };
-      (additions[catName] = additions[catName] || []).push(newItem);
-      pulled++;
-    });
-    Object.keys(additions).forEach((catName) => addItemsBulk(catName, additions[catName]));
-    return { pushed, pulled, updated };
-  }, loaded);
 
   return (
     <div style={{ minHeight: "100vh", background: COLORS.bg, fontFamily: "'Pretendard', 'IBM Plex Sans KR', sans-serif", color: COLORS.ink }}>
@@ -4129,10 +4061,7 @@ function InteriorToolkit({ onBack }) {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "24px" }}>
         {mode === "quantity" ? (
           activeCategory === "요약" ? (
-            <>
-              <div style={{ marginBottom: 10 }}><NotionStatusBadge sync={materialNotionSync} /></div>
-              <QuantitySummaryPanel data={data.quantity} />
-            </>
+            <QuantitySummaryPanel data={data.quantity} />
           ) : (
             <QuantityCategoryPanel
               catKey={activeCategory}
