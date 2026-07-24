@@ -108,10 +108,19 @@ module Sufx
           end
           cursor = [cursor, hi].max
         end
-        return unless v_max > cursor
+        if v_max > cursor
+          add_side_panel_patch(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk,
+                                u_min, u_max, cursor, v_max)
+        end
 
-        add_side_panel_patch(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk,
-                              u_min, u_max, cursor, v_max)
+        # 바닥판도 측판과 동일한 규칙: 밴드가 그 v구간을 덮지 않으면(바닥판은 밴드가
+        # 항상 상단 쪽에 있어 거의 항상 해당) 원래 전면보다 4mm 더 튀어나오게 채운다.
+        bottom_lo = v_min
+        bottom_hi = v_min + panel_thk
+        return if bands.any? { |lo, hi| bottom_lo < hi && bottom_hi > lo }
+
+        add_bottom_panel_patch(model, definition.entities, frame, shrunk_front_val, front_val, panel_thk,
+                                u_min, u_max, bottom_lo, bottom_hi)
       end
 
       # 챗넬 밴드(브라켓이 들어가는 v구간) 목록을 반환한다. v_min/v_max는 바디의
@@ -151,6 +160,18 @@ module Sufx
                                       BodyBlock.point_on_frame(frame, shrunk_front_val, u_max - panel_thk, v_lo),
                                       BodyBlock.point_on_frame(frame, patch_front_val, u_max, v_hi))
         tag_groove(model, right)
+      end
+
+      # 바닥판(폭 전체, panel_thk 두께)을 측판과 동일하게 원래 전면보다
+      # CHANNEL_LIP_EXTRA_MM만큼 더 튀어나오게 채운다.
+      def add_bottom_panel_patch(model, entities, frame, shrunk_front_val, front_val, panel_thk, u_min, u_max, v_lo, v_hi)
+        lip_extra = Units.mm_to_inch(Constants::CHANNEL_LIP_EXTRA_MM)
+        patch_front_val = front_val + (frame[:depth_sign] * lip_extra)
+
+        bottom = BodyBlock.create_box(entities,
+                                       BodyBlock.point_on_frame(frame, shrunk_front_val, u_min, v_lo),
+                                       BodyBlock.point_on_frame(frame, patch_front_val, u_max, v_hi))
+        tag_groove(model, bottom)
       end
 
       # 파내기 전(=풀 뎁스)의 바디 바운드를 최초 1회 캡처해 저장해두고 계속 재사용한다.
