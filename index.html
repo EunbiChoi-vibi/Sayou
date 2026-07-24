@@ -2595,49 +2595,8 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-function defaultItemsFor(cat) {
-  const map = {
-    목공: [
-      { name: "각재 (9자, 투바이)", unit: "개", coef: 3.5, loss: 5, mode: "area" },
-      { name: "합판 (9mm, 3×6)", unit: "장", coef: 0.45, loss: 10, mode: "area" },
-      { name: "석고보드 (9.5T)", unit: "장", coef: 1.1, loss: 5, mode: "area" },
-      { name: "몰딩 / 걸레받이", unit: "m", coef: 1.2, loss: 10, mode: "area" },
-      { name: "부자재 (타카핀 등)", unit: "식", coef: 0, loss: 0, mode: "fixed", fixedQty: 1 },
-    ],
-    필름: [
-      { name: "인테리어 필름지", unit: "m", coef: 3.0, loss: 15, mode: "area" },
-      { name: "프라이머 / 본드", unit: "L", coef: 0.15, loss: 10, mode: "area" },
-      { name: "부자재", unit: "식", coef: 0, loss: 0, mode: "fixed", fixedQty: 1 },
-    ],
-    도장: [
-      { name: "도료 (수성/유성, 2회)", unit: "L", coef: 0.3, loss: 10, mode: "area" },
-      { name: "퍼티", unit: "kg", coef: 0.2, loss: 10, mode: "area" },
-      { name: "프라이머", unit: "L", coef: 0.15, loss: 10, mode: "area" },
-      { name: "부자재 (사포 등)", unit: "식", coef: 0, loss: 0, mode: "fixed", fixedQty: 1 },
-    ],
-    마루: [
-      { name: "마루재 (강마루)", unit: "㎡", coef: 3.305785, loss: 5, mode: "area" },
-      { name: "언더레이 (방음패드)", unit: "㎡", coef: 3.305785, loss: 5, mode: "area" },
-      { name: "걸레받이 몰딩", unit: "m", coef: 1.2, loss: 10, mode: "area" },
-      { name: "접착제 / 본드", unit: "kg", coef: 0.3, loss: 5, mode: "area" },
-    ],
-    데코타일: [
-      { name: "데코타일", unit: "㎡", coef: 3.305785, loss: 5, mode: "area" },
-      { name: "본드", unit: "kg", coef: 0.3, loss: 5, mode: "area" },
-      { name: "부자재", unit: "식", coef: 0, loss: 0, mode: "fixed", fixedQty: 1 },
-    ],
-    도배지: [
-      { name: "실크벽지 (폭106×15.6m, 약 5평/롤)", unit: "롤", coef: 0.2, loss: 10, mode: "area" },
-      { name: "합지벽지 (약 3평/롤)", unit: "롤", coef: 0.334, loss: 10, mode: "area" },
-      { name: "풀 / 부자재", unit: "식", coef: 0, loss: 0, mode: "fixed", fixedQty: 1 },
-    ],
-    유리: [
-      { name: "강화유리 (5T, 투명)", unit: "㎡", coef: 3.305785, loss: 10, mode: "area" },
-      { name: "실리콘 코킹", unit: "개", coef: 0.5, loss: 5, mode: "area" },
-      { name: "부속철물 (경첩 / 스토퍼 등)", unit: "식", coef: 0, loss: 0, mode: "fixed", fixedQty: 1 },
-    ],
-  };
-  return (map[cat] || []).map((it) => ({ id: makeId(), fixedQty: it.fixedQty ?? 0, ...it }));
+function defaultItemsFor() {
+  return [];
 }
 
 function defaultQuantityCategoryState(cat) {
@@ -2687,7 +2646,7 @@ function defaultEstimateData() {
 }
 
 function defaultData() {
-  return { quantity: defaultQuantityData(), estimate: defaultEstimateData() };
+  return { quantity: defaultQuantityData(), estimate: defaultEstimateData(), quantityDefaultsCleared: true };
 }
 
 const STORAGE_KEY = "interior-toolkit-v1";
@@ -3677,6 +3636,14 @@ function InteriorToolkit({ onBack }) {
                   cs.options = k === "목공" ? { doubleSided: false, gypsumPly: 1 } : k === "데코타일" ? { tileSize: "450", piecesPerBox: 8 } : {};
                 }
               });
+            }
+            // 자재 물량 계산기의 자동 채워진 기본 항목(목공 각재 등)을 한 번만 비워줍니다.
+            // 견적 계산기(estimate)는 그대로 둡니다.
+            if (!parsed.quantityDefaultsCleared) {
+              CATEGORY_KEYS.forEach((k) => {
+                if (parsed.quantity.categories[k]) parsed.quantity.categories[k].items = [];
+              });
+              parsed.quantityDefaultsCleared = true;
             }
             setData(parsed);
           }
