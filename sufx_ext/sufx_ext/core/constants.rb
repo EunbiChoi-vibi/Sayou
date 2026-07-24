@@ -8,13 +8,14 @@ module Sufx
     DEFAULT_PANEL_THK      = 18.0 # mm, 바디블럭 측판/상판/하판 두께
     DEFAULT_BACK_PANEL_THK = 10.0 # mm, 바디블럭 뒷판 두께
 
-    # 챗넬(CH1/CH2) 가로 레일 부재. 측/상/하판보다 얇은 레일/걸레받이 느낌의 두께.
-    CHANNEL_RAIL_THK   = 8.0  # mm, 레일 세로 두께
-    CHANNEL_RAIL_DEPTH = 60.0 # mm, 뒤쪽에서 앞으로 얼마나 뻗어나오는지(서랍 레일처럼 좁게)
+    # 챗넬(CH1/CH2) — 전면 기준 바디 깊이를 파내고(RECESS) 그 자리에 단턱 브라켓을 채운다.
+    CHANNEL_RECESS_MM    = 10.0 # mm, Convert에서 선택한 전면 기준으로 바디 깊이를 줄이는 양
+    CHANNEL_BAND_H_MM    = 40.0 # mm, 브라켓이 차지하는 세로 폭(전면에서 볼 때)
+    CHANNEL_LIP_H_MM     = 10.0 # mm, 브라켓 하단부 중 추가로 더 튀어나오는 구간의 높이
+    CHANNEL_LIP_EXTRA_MM = 4.0  # mm, 하단 구간이 나머지(기본 돌출)보다 더 튀어나오는 두께
 
-    # mm, 임의 추정값(placeholder) — 실측 후 조정 필요.
-    # 서랍 상단이 상챗넬 레일과 부딪히지 않도록 줄여야 하는 높이 — 지금은 레일 두께와 동일하게 둔다.
-    CHANNEL_CLEARANCE = { 0 => 0.0, 1 => CHANNEL_RAIL_THK, 2 => CHANNEL_RAIL_THK }.freeze
+    # 서랍 상단이 챗넬 브라켓과 부딪히지 않도록 줄여야 하는 높이 — 브라켓 세로 폭과 동일하게 둔다.
+    CHANNEL_CLEARANCE = { 0 => 0.0, 1 => CHANNEL_BAND_H_MM, 2 => CHANNEL_BAND_H_MM }.freeze
 
     SCALE_HANDLE_AXES = [:x, :y, :z].freeze
 
