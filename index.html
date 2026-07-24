@@ -5671,9 +5671,9 @@ function ProjectSchedulePage({ onBack }) {
   const isMobile = useIsMobile();
   const [schedules, setSchedules] = useState({});
   const [loaded, setLoaded] = useState(false);
-  const [pipelineSites, setPipelineSites] = useState([]);
   const [projectName, setProjectName] = useState("");
   const [monthDate, setMonthDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const lastProjectRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -5688,14 +5688,6 @@ function ProjectSchedulePage({ onBack }) {
       } catch (e) {
         // first run
       }
-      let sites = [];
-      try {
-        const res3 = await window.storage.get(PIPELINE_STORAGE_KEY, true);
-        const parsed3 = res3 && res3.value ? JSON.parse(res3.value) : [];
-        if (Array.isArray(parsed3)) sites = parsed3;
-      } catch (e) {
-        // no pipeline sites yet
-      }
       let lastProject = null;
       try {
         const res2 = await window.storage.get(LAST_PROJECT_STORAGE_KEY, true);
@@ -5705,10 +5697,7 @@ function ProjectSchedulePage({ onBack }) {
       }
       if (!cancelled) {
         if (loadedSchedules) setSchedules(loadedSchedules);
-        setPipelineSites(sites);
-        const activeNames = sites.filter((s) => s.stage !== "종료").map((s) => s.name);
-        if (lastProject && activeNames.includes(lastProject)) setProjectName(lastProject);
-        else if (activeNames.length > 0) setProjectName(activeNames[0]);
+        lastProjectRef.current = lastProject;
         setLoaded(true);
       }
     })();
@@ -5770,12 +5759,23 @@ function ProjectSchedulePage({ onBack }) {
     return { pulled };
   }, loaded);
 
+  // "프로젝트 목록"을 노션에서 직접(라이브) 조회해서 씁니다 — 대시보드를 거치지 않고 바로 이 화면으로
+  // 들어와도 캐시가 오래돼 "완료" 프로젝트가 그대로 남아있는 일이 없도록 하기 위함입니다.
+  const { sites: pipelineSites, milestonesByProject } = usePipelineLookup();
+
   // 드롭다운은 "완료"가 아닌(진행 중인) 프로젝트만 보여줍니다 — 새 프로젝트가 생기면 빈 캘린더가 자동으로 준비돼요
   const activeOptions = Array.from(new Set(pipelineSites.filter((s) => s.stage !== "종료").map((s) => s.name))).filter(Boolean);
   const current = schedules[projectName] || defaultProjectSchedule();
 
-  // "프로젝트 목록"의 첫상담·실측일정·디자인미팅-1·디자인미팅-2도 공정표와 같은 캘린더에 함께 표시합니다
-  const { milestonesByProject } = usePipelineLookup();
+  // 선택된 프로젝트가 노션에서 "완료" 처리되면(=activeOptions에서 빠지면) 자동으로 다른 진행 중 프로젝트로 넘어갑니다
+  useEffect(() => {
+    if (!loaded) return;
+    if (projectName && activeOptions.includes(projectName)) return;
+    const lastProject = lastProjectRef.current;
+    if (lastProject && activeOptions.includes(lastProject)) setProjectName(lastProject);
+    else if (activeOptions.length > 0) setProjectName(activeOptions[0]);
+    else if (projectName) setProjectName("");
+  }, [loaded, projectName, activeOptions.join("|")]);
   const milestoneEvents = (milestonesByProject.get(projectName) || []).map((m) => ({
     id: `milestone-${projectName}-${m.kind}`,
     type: m.kind,
