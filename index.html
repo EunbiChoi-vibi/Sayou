@@ -37,11 +37,7 @@ function makeGlyphIcon(glyph) {
 }
 const Hammer = makeGlyphIcon("\uD83D\uDD28");
 const Layers = makeGlyphIcon("\uD83D\uDCD1");
-const Paintbrush = makeGlyphIcon("\uD83D\uDD8C\uFE0F");
-const Grid3x3 = makeGlyphIcon("\u25A6");
-const LayoutGrid = makeGlyphIcon("\u25A4");
 const FileText = makeGlyphIcon("\uD83D\uDCC4");
-const Diamond = makeGlyphIcon("\u25C6");
 const Store = makeGlyphIcon("\uD83C\uDFEC");
 const Search = makeGlyphIcon("\uD83D\uDD0D");
 const Upload = makeGlyphIcon("\u2B06\uFE0F");
@@ -2575,13 +2571,122 @@ const UNIT_OPTIONS = ["개", "장", "롤", "통", "포", "조", "식", "박스",
 const CATEGORY_META = [
   { key: "목공", icon: Hammer, desc: "각재 · 합판 · 석고보드 · 몰딩" },
   { key: "필름", icon: Layers, desc: "가구 · 도어 필름 시공" },
-  { key: "도장", icon: Paintbrush, desc: "수성/유성 도장, 퍼티" },
-  { key: "마루", icon: Grid3x3, desc: "강마루 · 합판마루" },
-  { key: "데코타일", icon: LayoutGrid, desc: "바닥 데코타일" },
   { key: "도배지", icon: FileText, desc: "실크 · 합지 벽지" },
-  { key: "유리", icon: Diamond, desc: "강화유리 · 거울 · 파티션" },
 ];
 const CATEGORY_KEYS = CATEGORY_META.map((c) => c.key);
+
+/* ---- 목공 계산기: MDF/석고보드/템바보드 규격 + 다루끼/투바이·몰딩 산출 ---- */
+const MDF_W = 1200, MDF_H = 2440;
+const GY_W = 900, GY_H = 1800;
+const TB_W = 1220, TB_H = 2440;
+const JJ_LEN = 3600, JJ_GAP = 450;
+const MOLD_LEN = 2400;
+const MDF_AREA = (MDF_W / 1000) * (MDF_H / 1000); // 2.928
+const GY_AREA = (GY_W / 1000) * (GY_H / 1000); // 1.620
+const TB_AREA = (TB_W / 1000) * (TB_H / 1000); // 2.977
+
+function defaultCarpentryBlock() {
+  return { id: makeId(), name: "", width: 0, height: 0, lossMdf: 5, lossGy: 12, lossTb: 7 };
+}
+function defaultMoldingBlock() {
+  return { id: makeId(), name: "", length: 0, loss: 5 };
+}
+function defaultCarpentryData() {
+  return { blocks: [defaultCarpentryBlock()], moldingBlocks: [defaultMoldingBlock()] };
+}
+function computeCarpentryBlock(block) {
+  const wMm = Number(block.width) || 0;
+  const hMm = Number(block.height) || 0;
+  const lossMdf = Number(block.lossMdf) || 0;
+  const lossGy = Number(block.lossGy) || 0;
+  const lossTb = Number(block.lossTb) || 0;
+
+  const areaM2 = (wMm / 1000) * (hMm / 1000);
+  const areaMdf = areaM2 * (1 + lossMdf / 100);
+  const areaGy = areaM2 * (1 + lossGy / 100);
+  const areaTb = areaM2 * (1 + lossTb / 100);
+
+  const mdfQty = MDF_AREA > 0 ? Math.ceil(areaMdf / MDF_AREA) : 0;
+  const gyQty = GY_AREA > 0 ? Math.ceil(areaGy / GY_AREA) : 0;
+  const tbQty = TB_AREA > 0 ? Math.ceil(areaTb / TB_AREA) : 0;
+
+  const vertical = wMm > 0 ? Math.ceil(wMm / JJ_GAP) + 1 : 0;
+  const segments = wMm > 0 ? Math.ceil(wMm / JJ_LEN) : 0;
+  const topBottom = segments * 2;
+  const jjQty = vertical + topBottom;
+
+  return { areaM2, areaMdf, areaGy, areaTb, mdfQty, gyQty, tbQty, vertical, segments, topBottom, jjQty };
+}
+function computeMoldingBlock(block) {
+  const lenMm = Number(block.length) || 0;
+  const loss = Number(block.loss) || 0;
+  const lenWithLoss = lenMm * (1 + loss / 100);
+  const qty = MOLD_LEN > 0 ? Math.ceil(lenWithLoss / MOLD_LEN) : 0;
+  return { lenWithLoss, qty };
+}
+function carpentryGrandTotals(carpentry) {
+  const totals = { mdf: 0, gy: 0, tb: 0, jj: 0, mold: 0 };
+  (carpentry.blocks || []).forEach((b) => {
+    const r = computeCarpentryBlock(b);
+    totals.mdf += r.mdfQty;
+    totals.gy += r.gyQty;
+    totals.tb += r.tbQty;
+    totals.jj += r.jjQty;
+  });
+  (carpentry.moldingBlocks || []).forEach((b) => {
+    totals.mold += computeMoldingBlock(b).qty;
+  });
+  return totals;
+}
+
+/* ---- 도배지(벽지) 계산기: 종류별 규격 + 공간별 벽/천장 면적 → 필요 롤수 ---- */
+const WALLPAPER_TYPE_DEFAULTS = {
+  sopok: { width: 53, loss: 8 },
+  gwangpok: { width: 93, loss: 8 },
+  silk: { width: 106, length: 15.6, loss: 12 },
+  etc: { loss: 10 },
+};
+const WALLPAPER_TYPE_LABELS = {
+  sopok: "소폭합지 (53cm)",
+  gwangpok: "광폭합지 (93cm)",
+  silk: "실크 (106cm)",
+  etc: "수입/기타 (직접입력)",
+};
+
+function defaultWallpaperSpace() {
+  return { id: makeId(), name: "", w: 0, h: 0, height: 0, ded: 0, includeCeiling: true };
+}
+function defaultWallpaperBlock() {
+  return { id: makeId(), name: "", type: "silk", width: 106, length: 15.6, loss: 12, bulkHeight: "", spaces: [defaultWallpaperSpace()] };
+}
+function defaultWallpaperData() {
+  return { blocks: [defaultWallpaperBlock()] };
+}
+function computeWallpaperSpace(space) {
+  const w = Number(space.w) || 0;
+  const h = Number(space.h) || 0;
+  const height = Number(space.height) || 0;
+  const ded = Number(space.ded) || 0;
+  const perimeter = 2 * (w + h);
+  const wallArea = Math.max(perimeter * height - ded, 0);
+  const ceilArea = space.includeCeiling ? w * h : 0;
+  return { wallArea, ceilArea, rowTotal: wallArea + ceilArea };
+}
+function computeWallpaperBlock(block) {
+  let net = 0;
+  (block.spaces || []).forEach((s) => { net += computeWallpaperSpace(s).rowTotal; });
+  const lossPct = Number(block.loss) || 0;
+  const lossArea = net * (1 + lossPct / 100);
+  const widthCm = Number(block.width) || 0;
+  const lengthM = Number(block.length) || 0;
+  const perRoll = (widthCm / 100) * lengthM;
+  const rolls = perRoll > 0 ? Math.ceil(lossArea / perRoll) : 0;
+  const pyeong = net / 3.3058;
+  return { net, lossArea, perRoll, rolls, pyeong };
+}
+function wallpaperGrandTotal(wallpaper) {
+  return (wallpaper.blocks || []).reduce((sum, b) => sum + computeWallpaperBlock(b).rolls, 0);
+}
 
 const VENDOR_LIST = ["바로상사", "LX벽지", "LX필름", "현대 보닥 필름", "영림 필름", "예림 필름", "한솔 필름"];
 
@@ -2603,12 +2708,7 @@ function defaultQuantityCategoryState(cat) {
   return {
     areas: [{ id: makeId(), label: "공간 1", width: 0, depth: 0 }],
     items: defaultItemsFor(cat),
-    options:
-      cat === "목공"
-        ? { doubleSided: false, gypsumPly: 1 }
-        : cat === "데코타일"
-        ? { tileSize: "450", piecesPerBox: 8 }
-        : {},
+    options: cat === "목공" ? { doubleSided: false, gypsumPly: 1 } : {},
   };
 }
 
@@ -2646,7 +2746,13 @@ function defaultEstimateData() {
 }
 
 function defaultData() {
-  return { quantity: defaultQuantityData(), estimate: defaultEstimateData(), quantityDefaultsCleared: true };
+  return {
+    quantity: defaultQuantityData(),
+    estimate: defaultEstimateData(),
+    carpentry: defaultCarpentryData(),
+    wallpaper: defaultWallpaperData(),
+    quantityDefaultsCleared: true,
+  };
 }
 
 const STORAGE_KEY = "interior-toolkit-v1";
@@ -2991,24 +3097,484 @@ function QtyItemRow({ item, totalPyeong, options, onChange, onRemove }) {
   );
 }
 
+/* ---------------------------------- 목공 계산기 (전용) ---------------------------------- */
+
+function CarpentryBlockCard({ block, onChange, onRemove, removable }) {
+  const r = computeCarpentryBlock(block);
+  function set(field, value) { onChange({ ...block, [field]: value }); }
+  const inputStyle = { padding: "7px 9px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface };
+  const rows = [
+    { label: "MDF 합판", detail: `면적 ${r.areaMdf.toFixed(2)}㎡ ÷ ${MDF_AREA.toFixed(3)}㎡`, qty: r.mdfQty, unit: "장" },
+    { label: "석고보드", detail: `면적 ${r.areaGy.toFixed(2)}㎡ ÷ ${GY_AREA.toFixed(3)}㎡`, qty: r.gyQty, unit: "장" },
+    { label: "템바보드", detail: `면적 ${r.areaTb.toFixed(2)}㎡ ÷ ${TB_AREA.toFixed(3)}㎡`, qty: r.tbQty, unit: "장" },
+    { label: "다루끼/투바이", detail: `수직 ${r.vertical}개 (${JJ_GAP}mm 간격) + 상하 ${r.topBottom}개 (${JJ_LEN}mm ${r.segments}분할)`, qty: r.jjQty, unit: "개" },
+  ];
+  return (
+    <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, marginBottom: 14, overflow: "hidden" }}>
+      <div className="flex items-end gap-3 flex-wrap" style={{ padding: "14px 16px 10px" }}>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>공간 이름</label>
+          <input type="text" value={block.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 거실 포인트벽" className="rounded text-sm" style={{ ...inputStyle, width: 170, fontWeight: 700 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>가로(mm)</label>
+          <input type="number" min="0" step="1" value={block.width} onChange={(e) => set("width", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 90 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>세로/높이(mm)</label>
+          <input type="number" min="0" step="1" value={block.height} onChange={(e) => set("height", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 90 }} />
+        </div>
+        <button onClick={onRemove} disabled={!removable} title="공간 삭제" className="rounded" style={{ marginLeft: "auto", padding: "7px 10px", color: removable ? COLORS.danger : COLORS.borderStrong, background: "transparent", cursor: removable ? "pointer" : "not-allowed", fontSize: 12 }}>
+          삭제 ✕
+        </button>
+      </div>
+      <div className="flex items-end gap-4 flex-wrap" style={{ padding: "0 16px 14px", borderBottom: `1px dashed ${COLORS.border}` }}>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>MDF 로스율(%)</label>
+          <input type="number" min="0" step="1" value={block.lossMdf} onChange={(e) => set("lossMdf", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 64 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>석고보드 로스율(%)</label>
+          <input type="number" min="0" step="1" value={block.lossGy} onChange={(e) => set("lossGy", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 64 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>템바보드 로스율(%)</label>
+          <input type="number" min="0" step="1" value={block.lossTb} onChange={(e) => set("lossTb", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 64 }} />
+        </div>
+      </div>
+      <div className="flex flex-col gap-2" style={{ padding: "12px 16px 16px" }}>
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center gap-3 flex-wrap rounded-lg" style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, padding: "10px 14px" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, width: 110, flexShrink: 0, color: COLORS.ink }}>{row.label}</div>
+            <div style={{ fontSize: 11.5, color: COLORS.inkSoft, flex: 1, minWidth: 180 }}>{row.detail}</div>
+            <div className="mono" style={{ fontSize: 16, fontWeight: 800, color: COLORS.accentDark, whiteSpace: "nowrap" }}>{row.qty} <span style={{ fontSize: 11, color: COLORS.inkSoft, fontWeight: 600 }}>{row.unit}</span></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MoldingBlockCard({ block, onChange, onRemove, removable }) {
+  const r = computeMoldingBlock(block);
+  function set(field, value) { onChange({ ...block, [field]: value }); }
+  const inputStyle = { padding: "7px 9px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface };
+  return (
+    <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, marginBottom: 10, overflow: "hidden" }}>
+      <div className="flex items-end gap-3 flex-wrap" style={{ padding: "14px 16px 10px" }}>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>구간 이름</label>
+          <input type="text" value={block.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 거실 걸레받이" className="rounded text-sm" style={{ ...inputStyle, width: 170, fontWeight: 700 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>설치 길이(mm)</label>
+          <input type="number" min="0" step="1" value={block.length} onChange={(e) => set("length", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 90 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>로스율(%)</label>
+          <input type="number" min="0" step="1" value={block.loss} onChange={(e) => set("loss", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 64 }} />
+        </div>
+        <button onClick={onRemove} disabled={!removable} title="구간 삭제" className="rounded" style={{ marginLeft: "auto", padding: "7px 10px", color: removable ? COLORS.danger : COLORS.borderStrong, background: "transparent", cursor: removable ? "pointer" : "not-allowed", fontSize: 12 }}>
+          삭제 ✕
+        </button>
+      </div>
+      <div style={{ padding: "0 16px 16px" }}>
+        <div className="flex items-center gap-3 flex-wrap rounded-lg" style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, padding: "10px 14px" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, width: 110, flexShrink: 0, color: COLORS.ink }}>걸레받이/몰딩</div>
+          <div style={{ fontSize: 11.5, color: COLORS.inkSoft, flex: 1, minWidth: 180 }}>길이 {r.lenWithLoss.toFixed(0)}mm ÷ {MOLD_LEN}mm</div>
+          <div className="mono" style={{ fontSize: 16, fontWeight: 800, color: COLORS.accentDark, whiteSpace: "nowrap" }}>{r.qty} <span style={{ fontSize: 11, color: COLORS.inkSoft, fontWeight: 600 }}>개</span></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CarpentryPanel({ data, onChange, onReset }) {
+  const meta = CATEGORY_META.find((c) => c.key === "목공");
+  const Icon = meta.icon;
+  const blocks = data.blocks && data.blocks.length ? data.blocks : [defaultCarpentryBlock()];
+  const moldingBlocks = data.moldingBlocks && data.moldingBlocks.length ? data.moldingBlocks : [defaultMoldingBlock()];
+  const totals = carpentryGrandTotals(data);
+  const [showOrder, setShowOrder] = useState(false);
+  const [hint, setHint] = useState("");
+
+  function updateBlock(id, next) { onChange((prev) => ({ ...prev, blocks: prev.blocks.map((b) => (b.id === id ? next : b)) })); }
+  function addBlock() { onChange((prev) => ({ ...prev, blocks: [...prev.blocks, defaultCarpentryBlock()] })); }
+  function removeBlock(id) { onChange((prev) => (prev.blocks.length <= 1 ? prev : { ...prev, blocks: prev.blocks.filter((b) => b.id !== id) })); }
+  function updateMolding(id, next) { onChange((prev) => ({ ...prev, moldingBlocks: prev.moldingBlocks.map((b) => (b.id === id ? next : b)) })); }
+  function addMolding() { onChange((prev) => ({ ...prev, moldingBlocks: [...prev.moldingBlocks, defaultMoldingBlock()] })); }
+  function removeMolding(id) { onChange((prev) => (prev.moldingBlocks.length <= 1 ? prev : { ...prev, moldingBlocks: prev.moldingBlocks.filter((b) => b.id !== id) })); }
+
+  function buildOrderText() {
+    const lines = [];
+    lines.push("목공자재 발주서");
+    lines.push("작성일: " + new Date().toLocaleDateString("ko-KR"));
+    lines.push("─────────────────────────");
+    blocks.forEach((b, idx) => {
+      const r = computeCarpentryBlock(b);
+      lines.push("");
+      lines.push(`■ ${b.name || "공간 " + (idx + 1)}  (${b.width || "-"} × ${b.height || "-"} mm)`);
+      lines.push(`  MDF 합판       : ${r.mdfQty} 장`);
+      lines.push(`  석고보드       : ${r.gyQty} 장`);
+      lines.push(`  템바보드       : ${r.tbQty} 장`);
+      lines.push(`  다루끼/투바이  : ${r.jjQty} 개   [수직 ${r.vertical}개 + 상하 ${r.topBottom}개]`);
+    });
+    if (moldingBlocks.length) {
+      lines.push("");
+      lines.push("■ 걸레받이 / 몰딩");
+      moldingBlocks.forEach((b, idx) => {
+        const r = computeMoldingBlock(b);
+        lines.push(`  ${b.name || "구간 " + (idx + 1)} : ${r.qty} 개`);
+      });
+    }
+    lines.push("");
+    lines.push("─────────────────────────");
+    lines.push(`총 MDF 합판       : ${totals.mdf} 장`);
+    lines.push(`총 석고보드       : ${totals.gy} 장`);
+    lines.push(`총 템바보드       : ${totals.tb} 장`);
+    lines.push(`총 다루끼/투바이  : ${totals.jj} 개`);
+    lines.push(`총 걸레받이/몰딩  : ${totals.mold} 개`);
+    return lines.join("\n");
+  }
+  const orderText = showOrder ? buildOrderText() : "";
+  async function copyOrder() {
+    try {
+      await navigator.clipboard.writeText(orderText);
+      setHint("복사됨");
+    } catch (e) {
+      setHint("복사 실패 - 직접 선택해 복사해주세요");
+    }
+    setTimeout(() => setHint(""), 1500);
+  }
+
+  return (
+    <div>
+      <div className="flex items-start justify-between flex-wrap gap-3" style={{ marginBottom: 16 }}>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center rounded-lg" style={{ width: 40, height: 40, background: COLORS.accentSoft, color: COLORS.accent }}>
+            <Icon size={20} />
+          </div>
+          <div>
+            <h2 className="font-semibold" style={{ fontSize: 18, color: COLORS.ink }}>목공</h2>
+            <p className="text-sm" style={{ color: COLORS.inkSoft }}>공간마다 가로×세로(mm)만 넣으면 MDF·석고보드·템바보드 장수와 다루끼/투바이 개수를 자동 계산합니다.</p>
+          </div>
+        </div>
+        <button onClick={onReset} className="flex items-center gap-1 rounded-lg text-sm" style={{ padding: "7px 12px", border: `1px solid ${COLORS.border}`, color: COLORS.inkSoft, background: COLORS.surface }}>
+          <RotateCcw size={14} /> 초기화
+        </button>
+      </div>
+
+      <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 16, marginBottom: 16 }}>
+        <h3 className="text-sm font-semibold" style={{ color: COLORS.ink, marginBottom: 10 }}>자재 규격 (고정값)</h3>
+        <div className="flex flex-wrap gap-6">
+          {[
+            { name: "MDF 합판", spec: `${MDF_W} × ${MDF_H} mm`, result: `유효면적: ${MDF_AREA.toFixed(3)} ㎡/장` },
+            { name: "석고보드", spec: `${GY_W} × ${GY_H} mm`, result: `유효면적: ${GY_AREA.toFixed(3)} ㎡/장` },
+            { name: "템바보드", spec: `${TB_W} × ${TB_H} mm`, result: `유효면적: ${TB_AREA.toFixed(3)} ㎡/장` },
+            { name: "다루끼 / 투바이", spec: `길이 ${JJ_LEN} mm · 배치간격 ${JJ_GAP} mm`, result: null },
+            { name: "걸레받이 / 몰딩", spec: `길이 ${MOLD_LEN} mm`, result: null },
+          ].map((s) => (
+            <div key={s.name} style={{ fontSize: 12, minWidth: 140 }}>
+              <div style={{ fontWeight: 700, color: COLORS.ink, marginBottom: 4 }}>{s.name}</div>
+              <div style={{ color: COLORS.inkSoft }}>{s.spec}</div>
+              {s.result && <div style={{ color: COLORS.accentDark, fontWeight: 700, marginTop: 2 }}>{s.result}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+        <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>공간별 자재 산출</h3>
+        <button onClick={addBlock} className="flex items-center gap-1 text-sm" style={{ color: COLORS.accent, background: "transparent" }}>
+          <Plus size={14} /> 공간 추가
+        </button>
+      </div>
+      {blocks.map((b) => (
+        <CarpentryBlockCard key={b.id} block={b} onChange={(next) => updateBlock(b.id, next)} onRemove={() => removeBlock(b.id)} removable={blocks.length > 1} />
+      ))}
+
+      <div className="flex items-center justify-between" style={{ margin: "20px 0 10px" }}>
+        <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>걸레받이 / 몰딩 <span style={{ fontWeight: 400, color: COLORS.inkSoft }}>· 설치 길이(mm)만으로 산출합니다</span></h3>
+        <button onClick={addMolding} className="flex items-center gap-1 text-sm" style={{ color: COLORS.accent, background: "transparent" }}>
+          <Plus size={14} /> 구간 추가
+        </button>
+      </div>
+      {moldingBlocks.map((b) => (
+        <MoldingBlockCard key={b.id} block={b} onChange={(next) => updateMolding(b.id, next)} onRemove={() => removeMolding(b.id)} removable={moldingBlocks.length > 1} />
+      ))}
+
+      <div className="rounded-xl flex items-center justify-between flex-wrap gap-4" style={{ background: COLORS.accent, color: "#fff", padding: "20px 22px", marginTop: 6 }}>
+        <div className="flex flex-wrap gap-6">
+          {[
+            { k: "MDF 합판", v: `${totals.mdf} 장` },
+            { k: "석고보드", v: `${totals.gy} 장` },
+            { k: "템바보드", v: `${totals.tb} 장` },
+            { k: "다루끼/투바이", v: `${totals.jj} 개` },
+            { k: "걸레받이/몰딩", v: `${totals.mold} 개` },
+          ].map((g) => (
+            <div key={g.k}>
+              <div style={{ fontSize: 10.5, color: "#C9C4B8", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>{g.k}</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{g.v}</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setShowOrder(true)} className="rounded-lg text-sm font-bold" style={{ padding: "13px 22px", border: "none", background: COLORS.amber, color: COLORS.accentDark }}>
+          발주서 작성
+        </button>
+      </div>
+
+      {showOrder && (
+        <div className="rounded-xl" style={{ marginTop: 18, background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 20 }}>
+          <h3 className="font-semibold" style={{ fontSize: 15, marginBottom: 10, color: COLORS.ink }}>발주서 요약</h3>
+          <pre className="mono" style={{ whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "14px 16px", color: COLORS.ink }}>{orderText}</pre>
+          <button onClick={copyOrder} className="rounded-lg text-sm font-bold" style={{ marginTop: 10, padding: "8px 16px", border: "none", background: COLORS.success, color: "#fff" }}>복사하기</button>
+          <span className="text-xs" style={{ marginLeft: 10, color: COLORS.inkSoft }}>{hint}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------- 도배지(벽지) 계산기 (전용) ---------------------------------- */
+
+function WallpaperSpaceRow({ space, onChange, onRemove, removable }) {
+  const r = computeWallpaperSpace(space);
+  function set(field, value) { onChange({ ...space, [field]: value }); }
+  const inputStyle = { padding: "6px 8px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface };
+  return (
+    <div className="flex items-end gap-2 flex-wrap rounded-lg" style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, padding: "10px 12px" }}>
+      <div className="flex flex-col gap-1">
+        <label style={{ fontSize: 9.5, color: COLORS.inkSoft, fontWeight: 700 }}>공간 이름</label>
+        <input type="text" value={space.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 거실" className="rounded text-sm" style={{ ...inputStyle, width: 110 }} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label style={{ fontSize: 9.5, color: COLORS.inkSoft, fontWeight: 700 }}>가로(m)</label>
+        <input type="number" min="0" step="0.01" value={space.w} onChange={(e) => set("w", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 68 }} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label style={{ fontSize: 9.5, color: COLORS.inkSoft, fontWeight: 700 }}>세로(m)</label>
+        <input type="number" min="0" step="0.01" value={space.h} onChange={(e) => set("h", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 68 }} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label style={{ fontSize: 9.5, color: COLORS.inkSoft, fontWeight: 700 }}>층고(m)</label>
+        <input type="number" min="0" step="0.01" value={space.height} onChange={(e) => set("height", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 68 }} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label style={{ fontSize: 9.5, color: COLORS.inkSoft, fontWeight: 700 }}>공제 ㎡</label>
+        <input type="number" min="0" step="0.1" value={space.ded} onChange={(e) => set("ded", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 68 }} />
+      </div>
+      <label className="flex items-center gap-1" style={{ fontSize: 11, color: COLORS.inkSoft, paddingBottom: 7 }}>
+        <input type="checkbox" checked={space.includeCeiling} onChange={(e) => set("includeCeiling", e.target.checked)} /> 천장 포함
+      </label>
+      <div style={{ fontSize: 11.5, color: COLORS.inkSoft, lineHeight: 1.5, whiteSpace: "nowrap", paddingBottom: 6 }}>
+        벽 {r.wallArea.toFixed(2)}{space.includeCeiling ? ` + 천장 ${r.ceilArea.toFixed(2)}` : ""} = <b style={{ color: COLORS.accentDark, fontSize: 12.5 }}>{r.rowTotal.toFixed(2)}㎡</b>
+      </div>
+      <button onClick={onRemove} disabled={!removable} title="이 공간 삭제" style={{ marginLeft: "auto", background: "transparent", border: "none", color: removable ? COLORS.inkMuted : COLORS.border, fontSize: 16, cursor: removable ? "pointer" : "not-allowed", paddingBottom: 4 }}>×</button>
+    </div>
+  );
+}
+
+function WallpaperBlockCard({ block, onChange, onRemove, removable }) {
+  const r = computeWallpaperBlock(block);
+  function set(field, value) { onChange({ ...block, [field]: value }); }
+  function setType(type) {
+    const d = WALLPAPER_TYPE_DEFAULTS[type] || {};
+    onChange({ ...block, type, width: d.width !== undefined ? d.width : "", length: d.length !== undefined ? d.length : "", loss: d.loss !== undefined ? d.loss : block.loss });
+  }
+  function updateSpace(id, next) { onChange({ ...block, spaces: block.spaces.map((s) => (s.id === id ? next : s)) }); }
+  function addSpace() { onChange({ ...block, spaces: [...block.spaces, defaultWallpaperSpace()] }); }
+  function removeSpace(id) {
+    if (block.spaces.length <= 1) return;
+    onChange({ ...block, spaces: block.spaces.filter((s) => s.id !== id) });
+  }
+  function applyBulkHeight() {
+    if (block.bulkHeight === "" || block.bulkHeight == null) return;
+    onChange({ ...block, spaces: block.spaces.map((s) => ({ ...s, height: block.bulkHeight })) });
+  }
+  const inputStyle = { padding: "7px 9px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface };
+  const rollsCapped = Math.min(r.rolls, 24);
+
+  return (
+    <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, marginBottom: 14, overflow: "hidden" }}>
+      <div className="flex items-end gap-3 flex-wrap" style={{ padding: "14px 16px 10px" }}>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>벽지 이름</label>
+          <input type="text" value={block.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 거실 실크" className="rounded text-sm" style={{ ...inputStyle, width: 150, fontWeight: 700 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>종류</label>
+          <select value={block.type} onChange={(e) => setType(e.target.value)} className="rounded text-sm" style={{ ...inputStyle, width: 168 }}>
+            {Object.keys(WALLPAPER_TYPE_LABELS).map((k) => <option key={k} value={k}>{WALLPAPER_TYPE_LABELS[k]}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>폭(cm)</label>
+          <input type="number" min="0" step="0.5" value={block.width} onChange={(e) => set("width", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 64 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>롤당 길이(m)</label>
+          <input type="number" min="0" step="0.1" value={block.length} onChange={(e) => set("length", e.target.value)} placeholder="라벨확인" className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 78 }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>로스율(%)</label>
+          <input type="number" min="0" step="1" value={block.loss} onChange={(e) => set("loss", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 64 }} />
+        </div>
+        <button onClick={onRemove} disabled={!removable} title="블록 삭제" className="rounded" style={{ marginLeft: "auto", padding: "7px 10px", color: removable ? COLORS.danger : COLORS.borderStrong, background: "transparent", cursor: removable ? "pointer" : "not-allowed", fontSize: 12 }}>
+          블록 삭제 ✕
+        </button>
+      </div>
+
+      <div className="flex items-end gap-2" style={{ padding: "8px 16px 14px", borderBottom: `1px dashed ${COLORS.border}` }}>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{ color: COLORS.inkSoft }}>일괄 층고(m)</label>
+          <input type="number" min="0" step="0.01" value={block.bulkHeight} onChange={(e) => set("bulkHeight", e.target.value)} placeholder="예: 2.3" className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 70 }} />
+        </div>
+        <button onClick={applyBulkHeight} className="rounded text-xs" style={{ padding: "7px 10px", border: `1px solid ${COLORS.border}`, color: COLORS.inkSoft, background: "transparent" }}>모든 공간에 적용</button>
+      </div>
+
+      <div className="flex flex-col gap-2" style={{ padding: "10px 16px 4px" }}>
+        {block.spaces.map((s) => (
+          <WallpaperSpaceRow key={s.id} space={s} onChange={(next) => updateSpace(s.id, next)} onRemove={() => removeSpace(s.id)} removable={block.spaces.length > 1} />
+        ))}
+      </div>
+      <div style={{ padding: "6px 16px 16px" }}>
+        <button onClick={addSpace} className="rounded text-xs" style={{ padding: "6px 12px", border: `1px dashed ${COLORS.borderStrong}`, color: COLORS.inkSoft, background: "transparent" }}>+ 공간 추가</button>
+      </div>
+
+      <div className="flex items-center flex-wrap gap-5" style={{ background: COLORS.accentSoft, padding: "14px 16px" }}>
+        <div>
+          <div style={{ fontSize: 10, color: COLORS.inkMuted, textTransform: "uppercase", fontWeight: 700 }}>순 시공면적</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.ink }}>{r.net.toFixed(2)} ㎡</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: COLORS.inkMuted, textTransform: "uppercase", fontWeight: 700 }}>로스 반영 면적</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.ink }}>{r.lossArea.toFixed(2)} ㎡</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: COLORS.inkMuted, textTransform: "uppercase", fontWeight: 700 }}>롤당 시공면적</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.ink }}>{r.perRoll > 0 ? r.perRoll.toFixed(2) + " ㎡" : "규격 입력 필요"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: COLORS.danger, textTransform: "uppercase", fontWeight: 700 }}>필요 롤수</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.danger }}>{r.rolls} 롤</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: COLORS.inkMuted, textTransform: "uppercase", fontWeight: 700 }}>환산 평수</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.ink }}>{r.pyeong.toFixed(1)} 평</div>
+        </div>
+        <div className="flex items-end flex-wrap" style={{ gap: 2, marginLeft: "auto", maxWidth: 220 }}>
+          {Array.from({ length: rollsCapped }).map((_, i) => (
+            <div key={i} style={{ width: 7, height: 20, background: COLORS.amber, borderRadius: "2px 2px 0 0" }} />
+          ))}
+          {r.rolls > 24 && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.amberDark, alignSelf: "center", marginLeft: 4 }}>+{r.rolls - 24}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WallpaperPanel({ data, onChange, onReset }) {
+  const meta = CATEGORY_META.find((c) => c.key === "도배지");
+  const Icon = meta.icon;
+  const blocks = data.blocks && data.blocks.length ? data.blocks : [defaultWallpaperBlock()];
+  const grandTotal = wallpaperGrandTotal(data);
+  const [showOrder, setShowOrder] = useState(false);
+  const [hint, setHint] = useState("");
+
+  function updateBlock(id, next) { onChange((prev) => ({ ...prev, blocks: prev.blocks.map((b) => (b.id === id ? next : b)) })); }
+  function addBlock() { onChange((prev) => ({ ...prev, blocks: [...prev.blocks, defaultWallpaperBlock()] })); }
+  function removeBlock(id) { onChange((prev) => (prev.blocks.length <= 1 ? prev : { ...prev, blocks: prev.blocks.filter((b) => b.id !== id) })); }
+
+  function buildOrderText() {
+    const lines = [];
+    lines.push("벽지 발주서");
+    lines.push("작성일: " + new Date().toLocaleDateString("ko-KR"));
+    lines.push("─────────────────────────");
+    let grandRolls = 0;
+    blocks.forEach((b, idx) => {
+      const r = computeWallpaperBlock(b);
+      grandRolls += r.rolls;
+      lines.push("");
+      lines.push(`■ ${b.name || "벽지 " + (idx + 1)}  (${WALLPAPER_TYPE_LABELS[b.type] || b.type})`);
+      lines.push(`  규격: 폭 ${b.width || "-"}cm × 롤당 ${b.length || "-"}m   로스율 ${b.loss || 0}%`);
+      lines.push("  공간별 실측:");
+      (b.spaces || []).forEach((s) => {
+        const sr = computeWallpaperSpace(s);
+        const breakdown = `벽 ${sr.wallArea.toFixed(2)}${s.includeCeiling ? ` + 천장 ${sr.ceilArea.toFixed(2)}` : ""} = ${sr.rowTotal.toFixed(2)} ㎡`;
+        lines.push(`    - ${s.name || "(공간명 미입력)"} : ${breakdown}`);
+      });
+      lines.push(`  순 시공면적: ${r.net.toFixed(2)} ㎡   →   발주 수량: ${r.rolls} 롤`);
+    });
+    lines.push("");
+    lines.push("─────────────────────────");
+    lines.push(`총 발주 롤수: ${grandRolls} 롤`);
+    return lines.join("\n");
+  }
+  const orderText = showOrder ? buildOrderText() : "";
+  async function copyOrder() {
+    try {
+      await navigator.clipboard.writeText(orderText);
+      setHint("복사됨");
+    } catch (e) {
+      setHint("복사 실패 - 직접 선택해 복사해주세요");
+    }
+    setTimeout(() => setHint(""), 1500);
+  }
+
+  return (
+    <div>
+      <div className="flex items-start justify-between flex-wrap gap-3" style={{ marginBottom: 16 }}>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center rounded-lg" style={{ width: 40, height: 40, background: COLORS.accentSoft, color: COLORS.accent }}>
+            <Icon size={20} />
+          </div>
+          <div>
+            <h2 className="font-semibold" style={{ fontSize: 18, color: COLORS.ink }}>도배지</h2>
+            <p className="text-sm" style={{ color: COLORS.inkSoft }}>공간별로 방 가로×세로×층고만 입력하면 벽면적과 천장면적을 자동으로 더해 필요 롤수를 계산합니다.</p>
+          </div>
+        </div>
+        <button onClick={onReset} className="flex items-center gap-1 rounded-lg text-sm" style={{ padding: "7px 12px", border: `1px solid ${COLORS.border}`, color: COLORS.inkSoft, background: COLORS.surface }}>
+          <RotateCcw size={14} /> 초기화
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+        <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>벽지 종류별 산출</h3>
+        <button onClick={addBlock} className="flex items-center gap-1 text-sm" style={{ color: COLORS.accent, background: "transparent" }}>
+          <Plus size={14} /> 벽지 추가
+        </button>
+      </div>
+      {blocks.map((b) => (
+        <WallpaperBlockCard key={b.id} block={b} onChange={(next) => updateBlock(b.id, next)} onRemove={() => removeBlock(b.id)} removable={blocks.length > 1} />
+      ))}
+
+      <div className="rounded-xl flex items-center justify-between flex-wrap gap-4" style={{ background: COLORS.accent, color: "#fff", padding: "20px 22px", marginTop: 6 }}>
+        <div>
+          <div style={{ fontSize: 12, color: "#C9C4B8", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>전체 발주 롤수 합계</div>
+          <div className="mono" style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>{grandTotal} 롤</div>
+        </div>
+        <button onClick={() => setShowOrder(true)} className="rounded-lg text-sm font-bold" style={{ padding: "13px 22px", border: "none", background: COLORS.amber, color: COLORS.accentDark }}>
+          발주서 작성
+        </button>
+      </div>
+
+      {showOrder && (
+        <div className="rounded-xl" style={{ marginTop: 18, background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 20 }}>
+          <h3 className="font-semibold" style={{ fontSize: 15, marginBottom: 10, color: COLORS.ink }}>발주서 요약</h3>
+          <pre className="mono" style={{ whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "14px 16px", color: COLORS.ink }}>{orderText}</pre>
+          <button onClick={copyOrder} className="rounded-lg text-sm font-bold" style={{ marginTop: 10, padding: "8px 16px", border: "none", background: COLORS.success, color: "#fff" }}>복사하기</button>
+          <span className="text-xs" style={{ marginLeft: 10, color: COLORS.inkSoft }}>{hint}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QuantityCategoryPanel({ catKey, meta, catState, onUpdateArea, onAddArea, onRemoveArea, onUpdateItem, onAddItem, onRemoveItem, onResetCategory, onUpdateOptions }) {
   const totalPyeong = categoryTotalPyeong(catState);
   const totalM2 = totalPyeong * PYEONG_TO_M2;
   const options = catState.options || {};
   const Icon = meta.icon;
-
-  // 데코타일: 사이즈(450/600각) 기준 필요 박스 수 계산
-  let tileBoxInfo = null;
-  if (catKey === "데코타일") {
-    const sizeM = options.tileSize === "600" ? 0.6 : 0.45;
-    const pieceArea = sizeM * sizeM;
-    const piecesPerBox = Number(options.piecesPerBox) || 1;
-    const boxCoverage = pieceArea * piecesPerBox;
-    const tileItem = catState.items.find((it) => it.name.includes("데코타일")) || catState.items[0];
-    const neededM2 = tileItem ? (totalPyeong * (Number(tileItem.coef) || 0) * (1 + (Number(tileItem.loss) || 0) / 100)) : totalM2;
-    const boxCount = boxCoverage > 0 ? Math.ceil(neededM2 / boxCoverage) : 0;
-    tileBoxInfo = { pieceArea, piecesPerBox, boxCoverage, neededM2, boxCount };
-  }
 
   return (
     <div>
@@ -3090,52 +3656,6 @@ function QuantityCategoryPanel({ catKey, meta, catState, onUpdateArea, onAddArea
         </div>
       )}
 
-      {catKey === "데코타일" && tileBoxInfo && (
-        <div className="rounded-xl" style={{ background: COLORS.accentSoft, border: `1px solid ${COLORS.border}`, padding: 16, marginBottom: 16 }}>
-          <h3 className="text-sm font-semibold" style={{ color: COLORS.ink, marginBottom: 10 }}>타일 규격 · 박스 주문 수량</h3>
-          <div className="flex items-center gap-6 flex-wrap">
-            <div className="flex items-center gap-3">
-              <span className="text-sm" style={{ color: COLORS.inkSoft }}>타일 규격</span>
-              {[{ v: "450", label: "450각" }, { v: "600", label: "600각" }].map((opt) => (
-                <label key={opt.v} className="flex items-center gap-1 text-sm" style={{ cursor: "pointer", color: COLORS.ink }}>
-                  <input
-                    type="radio"
-                    name="tileSize"
-                    checked={(options.tileSize || "450") === opt.v}
-                    onChange={() => {
-                      onUpdateOptions("tileSize", opt.v);
-                      onUpdateOptions("piecesPerBox", opt.v === "600" ? 4 : 8);
-                    }}
-                  />
-                  {opt.label}
-                </label>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm" style={{ color: COLORS.inkSoft }}>박스당 매수</span>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={options.piecesPerBox ?? 8}
-                onChange={(e) => onUpdateOptions("piecesPerBox", e.target.value)}
-                className="mono rounded text-sm text-right"
-                style={{ width: 60, padding: "6px 8px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface }}
-              />
-              <span className="text-sm" style={{ color: COLORS.inkSoft }}>매</span>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${COLORS.border}` }} className="flex items-center justify-between flex-wrap gap-2">
-            <span className="text-sm" style={{ color: COLORS.inkSoft }}>
-              박스당 시공면적 {formatQty(tileBoxInfo.boxCoverage, 3)}㎡ · 필요면적(로스율 포함) {formatQty(tileBoxInfo.neededM2)}㎡
-            </span>
-            <span className="mono font-bold" style={{ color: COLORS.accentDark, fontSize: 16 }}>
-              {tileBoxInfo.boxCount} 박스 주문
-            </span>
-          </div>
-        </div>
-      )}
-
       <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 16 }}>
         <h3 className="text-sm font-semibold" style={{ color: COLORS.ink, marginBottom: 8 }}>자재 물량 산출</h3>
         <div style={{ overflowX: "auto" }}>
@@ -3167,7 +3687,21 @@ function QuantityCategoryPanel({ catKey, meta, catState, onUpdateArea, onAddArea
   );
 }
 
-function QuantitySummaryPanel({ data }) {
+function QuantitySummaryPanel({ data, carpentry, wallpaper }) {
+  const carpentryTotals = carpentryGrandTotals(carpentry);
+  const carpentryRows = [
+    { id: "mdf", name: "MDF 합판", unit: "장", qty: carpentryTotals.mdf },
+    { id: "gy", name: "석고보드", unit: "장", qty: carpentryTotals.gy },
+    { id: "tb", name: "템바보드", unit: "장", qty: carpentryTotals.tb },
+    { id: "jj", name: "다루끼/투바이", unit: "개", qty: carpentryTotals.jj },
+    { id: "mold", name: "걸레받이/몰딩", unit: "개", qty: carpentryTotals.mold },
+  ];
+  const wallpaperRows = (wallpaper.blocks || []).map((b, idx) => ({
+    id: b.id,
+    name: b.name || `벽지 ${idx + 1}`,
+    unit: "롤",
+    qty: computeWallpaperBlock(b).rolls,
+  }));
   return (
     <div className="print-area">
       <div className="no-print flex items-center justify-between" style={{ marginBottom: 16 }}>
@@ -3200,6 +3734,25 @@ function QuantitySummaryPanel({ data }) {
           </thead>
           <tbody>
             {CATEGORY_KEYS.map((k) => {
+              if (k === "목공" || k === "도배지") {
+                const rows = k === "목공" ? carpentryRows : wallpaperRows;
+                return (
+                  <Fragment key={k}>
+                    <tr>
+                      <td colSpan={3} style={{ padding: "12px 8px 4px", color: COLORS.accentDark, fontWeight: 700, fontSize: 13 }}>
+                        {k}
+                      </td>
+                    </tr>
+                    {rows.map((row) => (
+                      <tr key={row.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                        <td style={{ padding: "6px 8px 6px 20px", color: COLORS.ink }}>{row.name}</td>
+                        <td className="mono" style={{ padding: "6px 8px", color: COLORS.inkSoft }}>{row.unit}</td>
+                        <td className="mono text-right" style={{ padding: "6px 8px", color: COLORS.ink, fontWeight: 600 }}>{formatQty(row.qty)}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              }
               const cs = data.categories[k];
               const totalPyeong = categoryTotalPyeong(cs);
               return (
@@ -3633,7 +4186,7 @@ function InteriorToolkit({ onBack }) {
                   return { width: 0, depth: 0, ...a };
                 });
                 if (!cs.options) {
-                  cs.options = k === "목공" ? { doubleSided: false, gypsumPly: 1 } : k === "데코타일" ? { tileSize: "450", piecesPerBox: 8 } : {};
+                  cs.options = k === "목공" ? { doubleSided: false, gypsumPly: 1 } : {};
                 }
               });
             }
@@ -3645,6 +4198,9 @@ function InteriorToolkit({ onBack }) {
               });
               parsed.quantityDefaultsCleared = true;
             }
+            // 목공/도배지 전용 계산기 데이터 — 이 기능이 생기기 전에 저장된 데이터에는 없으므로 기본값을 채워줍니다.
+            if (!parsed.carpentry) parsed.carpentry = defaultCarpentryData();
+            if (!parsed.wallpaper) parsed.wallpaper = defaultWallpaperData();
             setData(parsed);
           }
         }
@@ -3788,9 +4344,27 @@ function InteriorToolkit({ onBack }) {
   }
   function resetAllQuantity() {
     askConfirm("물량 계산기 전체를 초기화할까요? 입력한 모든 면적 데이터가 사라집니다.", () => {
-      setData((prev) => ({ ...prev, quantity: defaultQuantityData() }));
+      setData((prev) => ({ ...prev, quantity: defaultQuantityData(), carpentry: defaultCarpentryData(), wallpaper: defaultWallpaperData() }));
       showToast("success", "물량 계산기를 초기화했습니다.");
     });
+  }
+  function resetCarpentry() {
+    askConfirm("목공 계산기를 초기화할까요? 입력한 모든 공간 데이터가 사라집니다.", () => {
+      setData((prev) => ({ ...prev, carpentry: defaultCarpentryData() }));
+      showToast("success", "목공 계산기를 초기화했습니다.");
+    });
+  }
+  function resetWallpaper() {
+    askConfirm("도배지 계산기를 초기화할까요? 입력한 모든 벽지 데이터가 사라집니다.", () => {
+      setData((prev) => ({ ...prev, wallpaper: defaultWallpaperData() }));
+      showToast("success", "도배지 계산기를 초기화했습니다.");
+    });
+  }
+  function updateCarpentry(updater) {
+    setData((prev) => ({ ...prev, carpentry: typeof updater === "function" ? updater(prev.carpentry) : updater }));
+  }
+  function updateWallpaper(updater) {
+    setData((prev) => ({ ...prev, wallpaper: typeof updater === "function" ? updater(prev.wallpaper) : updater }));
   }
 
   /* ---- estimate handlers ---- */
@@ -3963,7 +4537,13 @@ function InteriorToolkit({ onBack }) {
                     onClick={() => setActiveCategory(c.key)}
                     icon={c.icon}
                     label={c.key}
-                    sub={`${formatQty(categoryTotalPyeong(data.quantity.categories[c.key]))}평`}
+                    sub={
+                      c.key === "목공"
+                        ? `${data.carpentry.blocks.length}개 공간`
+                        : c.key === "도배지"
+                        ? `${wallpaperGrandTotal(data.wallpaper)}롤`
+                        : `${formatQty(categoryTotalPyeong(data.quantity.categories[c.key]))}평`
+                    }
                   />
                 ))}
                 <div style={{ width: 1, height: 24, background: COLORS.border, margin: "0 4px" }} />
@@ -4028,7 +4608,11 @@ function InteriorToolkit({ onBack }) {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "24px" }}>
         {mode === "quantity" ? (
           activeCategory === "요약" ? (
-            <QuantitySummaryPanel data={data.quantity} />
+            <QuantitySummaryPanel data={data.quantity} carpentry={data.carpentry} wallpaper={data.wallpaper} />
+          ) : activeCategory === "목공" ? (
+            <CarpentryPanel data={data.carpentry} onChange={updateCarpentry} onReset={resetCarpentry} />
+          ) : activeCategory === "도배지" ? (
+            <WallpaperPanel data={data.wallpaper} onChange={updateWallpaper} onReset={resetWallpaper} />
           ) : (
             <QuantityCategoryPanel
               catKey={activeCategory}
