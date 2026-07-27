@@ -2585,6 +2585,15 @@ const MDF_AREA = (MDF_W / 1000) * (MDF_H / 1000); // 2.928
 const GY_AREA = (GY_W / 1000) * (GY_H / 1000); // 1.620
 const TB_AREA = (TB_W / 1000) * (TB_H / 1000); // 2.977
 
+// 목공자재 산출 항목 순서 — 템바보드는 맨 아래에 옵니다. 각 항목은 켜고 끌 수 있습니다.
+const CARPENTRY_MATERIAL_ORDER = [
+  { key: "mdf", label: "MDF 합판", unit: "장" },
+  { key: "gy", label: "석고보드", unit: "장" },
+  { key: "jj", label: "다루끼/투바이", unit: "개" },
+  { key: "tb", label: "템바보드", unit: "장" },
+];
+const DEFAULT_CARPENTRY_ENABLED = { mdf: true, gy: true, jj: true, tb: true };
+
 function defaultCarpentryBlock() {
   return { id: makeId(), name: "", width: 0, height: 0, lossMdf: 5, lossGy: 12, lossTb: 7 };
 }
@@ -2592,7 +2601,7 @@ function defaultMoldingBlock() {
   return { id: makeId(), name: "", length: 0, loss: 5 };
 }
 function defaultCarpentryData() {
-  return { blocks: [defaultCarpentryBlock()], moldingBlocks: [defaultMoldingBlock()] };
+  return { blocks: [defaultCarpentryBlock()], moldingBlocks: [defaultMoldingBlock()], enabledMaterials: { ...DEFAULT_CARPENTRY_ENABLED } };
 }
 function computeCarpentryBlock(block) {
   const wMm = Number(block.width) || 0;
@@ -2625,13 +2634,14 @@ function computeMoldingBlock(block) {
   return { lenWithLoss, qty };
 }
 function carpentryGrandTotals(carpentry) {
+  const enabled = carpentry.enabledMaterials || DEFAULT_CARPENTRY_ENABLED;
   const totals = { mdf: 0, gy: 0, tb: 0, jj: 0, mold: 0 };
   (carpentry.blocks || []).forEach((b) => {
     const r = computeCarpentryBlock(b);
-    totals.mdf += r.mdfQty;
-    totals.gy += r.gyQty;
-    totals.tb += r.tbQty;
-    totals.jj += r.jjQty;
+    if (enabled.mdf !== false) totals.mdf += r.mdfQty;
+    if (enabled.gy !== false) totals.gy += r.gyQty;
+    if (enabled.tb !== false) totals.tb += r.tbQty;
+    if (enabled.jj !== false) totals.jj += r.jjQty;
   });
   (carpentry.moldingBlocks || []).forEach((b) => {
     totals.mold += computeMoldingBlock(b).qty;
@@ -3099,16 +3109,17 @@ function QtyItemRow({ item, totalPyeong, options, onChange, onRemove }) {
 
 /* ---------------------------------- 목공 계산기 (전용) ---------------------------------- */
 
-function CarpentryBlockCard({ block, onChange, onRemove, removable }) {
+function CarpentryBlockCard({ block, enabled, onChange, onRemove, removable }) {
   const r = computeCarpentryBlock(block);
   function set(field, value) { onChange({ ...block, [field]: value }); }
   const inputStyle = { padding: "7px 9px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface };
-  const rows = [
-    { label: "MDF 합판", detail: `면적 ${r.areaMdf.toFixed(2)}㎡ ÷ ${MDF_AREA.toFixed(3)}㎡`, qty: r.mdfQty, unit: "장" },
-    { label: "석고보드", detail: `면적 ${r.areaGy.toFixed(2)}㎡ ÷ ${GY_AREA.toFixed(3)}㎡`, qty: r.gyQty, unit: "장" },
-    { label: "템바보드", detail: `면적 ${r.areaTb.toFixed(2)}㎡ ÷ ${TB_AREA.toFixed(3)}㎡`, qty: r.tbQty, unit: "장" },
-    { label: "다루끼/투바이", detail: `수직 ${r.vertical}개 (${JJ_GAP}mm 간격) + 상하 ${r.topBottom}개 (${JJ_LEN}mm ${r.segments}분할)`, qty: r.jjQty, unit: "개" },
-  ];
+  const rowDetail = {
+    mdf: { label: "MDF 합판", detail: `면적 ${r.areaMdf.toFixed(2)}㎡ ÷ ${MDF_AREA.toFixed(3)}㎡`, qty: r.mdfQty, unit: "장" },
+    gy: { label: "석고보드", detail: `면적 ${r.areaGy.toFixed(2)}㎡ ÷ ${GY_AREA.toFixed(3)}㎡`, qty: r.gyQty, unit: "장" },
+    jj: { label: "다루끼/투바이", detail: `수직 ${r.vertical}개 (${JJ_GAP}mm 간격) + 상하 ${r.topBottom}개 (${JJ_LEN}mm ${r.segments}분할)`, qty: r.jjQty, unit: "개" },
+    tb: { label: "템바보드", detail: `면적 ${r.areaTb.toFixed(2)}㎡ ÷ ${TB_AREA.toFixed(3)}㎡`, qty: r.tbQty, unit: "장" },
+  };
+  const rows = CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).map((m) => rowDetail[m.key]);
   return (
     <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, marginBottom: 14, overflow: "hidden" }}>
       <div className="flex items-end gap-3 flex-wrap" style={{ padding: "14px 16px 10px" }}>
@@ -3194,6 +3205,7 @@ function CarpentryPanel({ data, onChange, onReset }) {
   const Icon = meta.icon;
   const blocks = data.blocks && data.blocks.length ? data.blocks : [defaultCarpentryBlock()];
   const moldingBlocks = data.moldingBlocks && data.moldingBlocks.length ? data.moldingBlocks : [defaultMoldingBlock()];
+  const enabled = data.enabledMaterials || DEFAULT_CARPENTRY_ENABLED;
   const totals = carpentryGrandTotals(data);
   const [showOrder, setShowOrder] = useState(false);
   const [hint, setHint] = useState("");
@@ -3204,20 +3216,29 @@ function CarpentryPanel({ data, onChange, onReset }) {
   function updateMolding(id, next) { onChange((prev) => ({ ...prev, moldingBlocks: prev.moldingBlocks.map((b) => (b.id === id ? next : b)) })); }
   function addMolding() { onChange((prev) => ({ ...prev, moldingBlocks: [...prev.moldingBlocks, defaultMoldingBlock()] })); }
   function removeMolding(id) { onChange((prev) => (prev.moldingBlocks.length <= 1 ? prev : { ...prev, moldingBlocks: prev.moldingBlocks.filter((b) => b.id !== id) })); }
+  function toggleMaterial(key) {
+    onChange((prev) => {
+      const cur = prev.enabledMaterials || DEFAULT_CARPENTRY_ENABLED;
+      return { ...prev, enabledMaterials: { ...cur, [key]: cur[key] === false ? true : false } };
+    });
+  }
 
   function buildOrderText() {
     const lines = [];
     lines.push("목공자재 발주서");
     lines.push("작성일: " + new Date().toLocaleDateString("ko-KR"));
     lines.push("─────────────────────────");
+    const unitByKey = { mdf: "장", gy: "장", jj: "개", tb: "장" };
+    const qtyByKeyFor = (r) => ({ mdf: r.mdfQty, gy: r.gyQty, jj: r.jjQty, tb: r.tbQty });
     blocks.forEach((b, idx) => {
       const r = computeCarpentryBlock(b);
+      const qtyByKey = qtyByKeyFor(r);
       lines.push("");
       lines.push(`■ ${b.name || "공간 " + (idx + 1)}  (${b.width || "-"} × ${b.height || "-"} mm)`);
-      lines.push(`  MDF 합판       : ${r.mdfQty} 장`);
-      lines.push(`  석고보드       : ${r.gyQty} 장`);
-      lines.push(`  템바보드       : ${r.tbQty} 장`);
-      lines.push(`  다루끼/투바이  : ${r.jjQty} 개   [수직 ${r.vertical}개 + 상하 ${r.topBottom}개]`);
+      CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).forEach((m) => {
+        const extra = m.key === "jj" ? `   [수직 ${r.vertical}개 + 상하 ${r.topBottom}개]` : "";
+        lines.push(`  ${m.label.padEnd(13, " ")}: ${qtyByKey[m.key]} ${m.unit}${extra}`);
+      });
     });
     if (moldingBlocks.length) {
       lines.push("");
@@ -3229,10 +3250,9 @@ function CarpentryPanel({ data, onChange, onReset }) {
     }
     lines.push("");
     lines.push("─────────────────────────");
-    lines.push(`총 MDF 합판       : ${totals.mdf} 장`);
-    lines.push(`총 석고보드       : ${totals.gy} 장`);
-    lines.push(`총 템바보드       : ${totals.tb} 장`);
-    lines.push(`총 다루끼/투바이  : ${totals.jj} 개`);
+    CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).forEach((m) => {
+      lines.push(`총 ${m.label.padEnd(13, " ")}: ${totals[m.key]} ${m.unit}`);
+    });
     lines.push(`총 걸레받이/몰딩  : ${totals.mold} 개`);
     return lines.join("\n");
   }
@@ -3270,8 +3290,8 @@ function CarpentryPanel({ data, onChange, onReset }) {
           {[
             { name: "MDF 합판", spec: `${MDF_W} × ${MDF_H} mm`, result: `유효면적: ${MDF_AREA.toFixed(3)} ㎡/장` },
             { name: "석고보드", spec: `${GY_W} × ${GY_H} mm`, result: `유효면적: ${GY_AREA.toFixed(3)} ㎡/장` },
-            { name: "템바보드", spec: `${TB_W} × ${TB_H} mm`, result: `유효면적: ${TB_AREA.toFixed(3)} ㎡/장` },
             { name: "다루끼 / 투바이", spec: `길이 ${JJ_LEN} mm · 배치간격 ${JJ_GAP} mm`, result: null },
+            { name: "템바보드", spec: `${TB_W} × ${TB_H} mm`, result: `유효면적: ${TB_AREA.toFixed(3)} ㎡/장` },
             { name: "걸레받이 / 몰딩", spec: `길이 ${MOLD_LEN} mm`, result: null },
           ].map((s) => (
             <div key={s.name} style={{ fontSize: 12, minWidth: 140 }}>
@@ -3283,6 +3303,25 @@ function CarpentryPanel({ data, onChange, onReset }) {
         </div>
       </div>
 
+      <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 16, marginBottom: 16 }}>
+        <h3 className="text-sm font-semibold" style={{ color: COLORS.ink, marginBottom: 10 }}>산출 항목 켜기/끄기 <span style={{ fontWeight: 400, color: COLORS.inkSoft }}>· 이 프로젝트에 필요 없는 자재는 꺼두면 계산·발주서에서 빠집니다</span></h3>
+        <div className="flex flex-wrap gap-2">
+          {CARPENTRY_MATERIAL_ORDER.map((m) => {
+            const on = enabled[m.key] !== false;
+            return (
+              <button
+                key={m.key}
+                onClick={() => toggleMaterial(m.key)}
+                className="rounded-full text-xs font-semibold"
+                style={{ padding: "7px 14px", border: `1px solid ${on ? COLORS.accent : COLORS.border}`, background: on ? COLORS.accent : COLORS.surface, color: on ? "#fff" : COLORS.inkMuted }}
+              >
+                {m.label} · {on ? "ON" : "OFF"}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
         <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>공간별 자재 산출</h3>
         <button onClick={addBlock} className="flex items-center gap-1 text-sm" style={{ color: COLORS.accent, background: "transparent" }}>
@@ -3290,7 +3329,7 @@ function CarpentryPanel({ data, onChange, onReset }) {
         </button>
       </div>
       {blocks.map((b) => (
-        <CarpentryBlockCard key={b.id} block={b} onChange={(next) => updateBlock(b.id, next)} onRemove={() => removeBlock(b.id)} removable={blocks.length > 1} />
+        <CarpentryBlockCard key={b.id} block={b} enabled={enabled} onChange={(next) => updateBlock(b.id, next)} onRemove={() => removeBlock(b.id)} removable={blocks.length > 1} />
       ))}
 
       <div className="flex items-center justify-between" style={{ margin: "20px 0 10px" }}>
@@ -3306,10 +3345,7 @@ function CarpentryPanel({ data, onChange, onReset }) {
       <div className="rounded-xl flex items-center justify-between flex-wrap gap-4" style={{ background: COLORS.accent, color: "#fff", padding: "20px 22px", marginTop: 6 }}>
         <div className="flex flex-wrap gap-6">
           {[
-            { k: "MDF 합판", v: `${totals.mdf} 장` },
-            { k: "석고보드", v: `${totals.gy} 장` },
-            { k: "템바보드", v: `${totals.tb} 장` },
-            { k: "다루끼/투바이", v: `${totals.jj} 개` },
+            ...CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).map((m) => ({ k: m.label, v: `${totals[m.key]} ${m.unit}` })),
             { k: "걸레받이/몰딩", v: `${totals.mold} 개` },
           ].map((g) => (
             <div key={g.k}>
@@ -3689,11 +3725,9 @@ function QuantityCategoryPanel({ catKey, meta, catState, onUpdateArea, onAddArea
 
 function QuantitySummaryPanel({ data, carpentry, wallpaper }) {
   const carpentryTotals = carpentryGrandTotals(carpentry);
+  const carpentryEnabled = carpentry.enabledMaterials || DEFAULT_CARPENTRY_ENABLED;
   const carpentryRows = [
-    { id: "mdf", name: "MDF 합판", unit: "장", qty: carpentryTotals.mdf },
-    { id: "gy", name: "석고보드", unit: "장", qty: carpentryTotals.gy },
-    { id: "tb", name: "템바보드", unit: "장", qty: carpentryTotals.tb },
-    { id: "jj", name: "다루끼/투바이", unit: "개", qty: carpentryTotals.jj },
+    ...CARPENTRY_MATERIAL_ORDER.filter((m) => carpentryEnabled[m.key] !== false).map((m) => ({ id: m.key, name: m.label, unit: m.unit, qty: carpentryTotals[m.key] })),
     { id: "mold", name: "걸레받이/몰딩", unit: "개", qty: carpentryTotals.mold },
   ];
   const wallpaperRows = (wallpaper.blocks || []).map((b, idx) => ({
