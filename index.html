@@ -2698,6 +2698,29 @@ function wallpaperGrandTotal(wallpaper) {
   return (wallpaper.blocks || []).reduce((sum, b) => sum + computeWallpaperBlock(b).rolls, 0);
 }
 
+/* ---- 필름 계산기: 필름지별 시공 공간(가로×세로) → 면적(㎡·평) 산출 ---- */
+function defaultFilmSpace() {
+  return { id: makeId(), name: "", w: 0, h: 0 };
+}
+function defaultFilmBlock() {
+  return { id: makeId(), name: "", spaces: [defaultFilmSpace()] };
+}
+function defaultFilmData() {
+  return { blocks: [defaultFilmBlock()] };
+}
+function computeFilmBlock(block) {
+  let m2 = 0;
+  (block.spaces || []).forEach((s) => {
+    const w = Number(s.w) || 0;
+    const h = Number(s.h) || 0;
+    m2 += (w / 1000) * (h / 1000);
+  });
+  return { m2, pyeong: m2 / PYEONG_TO_M2 };
+}
+function filmGrandTotal(film) {
+  return (film.blocks || []).reduce((sum, b) => sum + computeFilmBlock(b).m2, 0);
+}
+
 const VENDOR_LIST = ["바로상사", "LX벽지", "LX필름", "현대 보닥 필름", "영림 필름", "예림 필름", "한솔 필름"];
 
 const BARO_SANGSA_SEED = [{"name": "석고보드 - 일반석고보드 900*1800*9.5T", "unit": "장", "price": 3580}, {"name": "석고보드 - 일반석고보드 900*1800*12.5T", "unit": "장", "price": 5050}, {"name": "석고보드 - 일반석고보드 900*2400*9.5T", "unit": "장", "price": 5150}, {"name": "석고보드 - 차음석고보드 900*1800*12.5T", "unit": "장", "price": 5960}, {"name": "석고보드 - 방수석고보드 900*1800*9.5T", "unit": "장", "price": 8034}, {"name": "석고보드 - 방수석고보드 900*2400*12.5T", "unit": "장", "price": 8550}, {"name": "석고보드 - 방화석고보드 900*1800*12.5T", "unit": "장", "price": 6380}, {"name": "석고보드 - 방화석고보드 900*1800*15T", "unit": "장", "price": 8280}, {"name": "석고보드 - 방화석고보드 900*1800*19T", "unit": "장", "price": 11280}, {"name": "석고보드 - KCC 석고본드 / 25KG", "unit": "포", "price": 12500}, {"name": "유공석고 - [주문]유공보드(사각 8등분) 900*1800*12.5T", "unit": "장", "price": 31500}, {"name": "유공석고 - [주문]유공석고(사각 10mm) 900*1800*12.5T", "unit": "장", "price": 33000}, {"name": "유공석고 - [주문]유공석고(원형 12mm) 900*1800*12.5T", "unit": "장", "price": 33000}, {"name": "유공석고 - [주문]유공석고(원형 15mm) 900*1800*12.5T", "unit": "장", "price": 33000}, {"name": "CRC보드 - CRC 보드 6T 900*1800", "unit": "장", "price": 9800}, {"name": "CRC보드 - CRC 보드 9T 900*1800", "unit": "장", "price": 13500}, {"name": "단열재 - 이보드(e보드) 13T 도배용", "unit": "장", "price": 15900}, {"name": "단열재 - 이보드(e보드) 23T 도배용", "unit": "장", "price": 22000}, {"name": "단열재 - 이보드(e보드) 33T 도배용", "unit": "장", "price": 28500}, {"name": "단열재 - 이보드(e보드) 13T 페인트용", "unit": "장", "price": 17200}, {"name": "단열재 - 이보드(e보드) 23T 페인트용", "unit": "장", "price": 23900}, {"name": "단열재 - 아이소핑크 특호 900*1800*20T", "unit": "개", "price": 6400}, {"name": "단열재 - 아이소핑크 특호 900*1800*30T", "unit": "개", "price": 8200}, {"name": "단열재 - 아이소핑크 특호 900*1800*50T", "unit": "개", "price": 14200}, {"name": "단열재 - 아이소핑크 특호 900*1800*100T", "unit": "개", "price": 27000}, {"name": "단열재 - 그라스울 24K 50T 450*1000(28EA)", "unit": "개", "price": 42800}, {"name": "단열재 - 미네랄울 50K 50T 450*1000 (10EA)", "unit": "개", "price": 18800}, {"name": "단열재 - 스카이비바24K 슈퍼론 450*1000*50T [10EA]", "unit": "개", "price": 18200}, {"name": "단열재 - 열반사단열재 10T 양면접착형(25M)", "unit": "개", "price": 82000}, {"name": "단열재 - 열반사단열재 5T 양면접착형(45M)", "unit": "개", "price": 83000}, {"name": "단열재 - 비드법 2종1호", "unit": "개", "price": "전화 문의"}, {"name": "단열재 - 경질우레탄보드", "unit": "장", "price": "전화 문의"}, {"name": "단열재 - PF보드", "unit": "장", "price": "전화 문의"}, {"name": "골드폭스보드 - 뉴골드폭스보드 900*2400*12T", "unit": "장", "price": 31500}, {"name": "골드폭스보드 - 뉴골드폭스보드 900*2400*22T", "unit": "장", "price": 37000}, {"name": "골드폭스보드 - 뉴골드폭스보드 900*2400*32T", "unit": "장", "price": 42000}, {"name": "골드폭스보드 - 뉴골드폭스보드 900*2400*52T", "unit": "장", "price": 48000}, {"name": "텍스 - 석고텍스 9.5T 300*600", "unit": "장", "price": 15900}, {"name": "텍스 - 집텍스 9.5T 300*600", "unit": "장", "price": 15900}, {"name": "텍스 - 크린텍스 6T 300*600", "unit": "장", "price": 60000}, {"name": "텍스 - 마이텍스 12T 300*600", "unit": "장", "price": 23900}, {"name": "마이톤 - KCC 마이톤 MT400 15T 603*603", "unit": "장", "price": 23900}, {"name": "마이톤 - KCC 마이톤 MT440 9T 300*600", "unit": "장", "price": 34000}, {"name": "마이톤 - KCC 마이톤 MT440 12T 300*600", "unit": "장", "price": 24900}, {"name": "마이톤 - KCC 마이톤 MT441 12T 600*600", "unit": "장", "price": 33500}, {"name": "마이톤 - KCC 마이톤 MT420 15T 300*1210", "unit": "장", "price": 38900}, {"name": "마이톤 - KCC 마이톤 MT420 15T 300*1500", "unit": "장", "price": 49500}, {"name": "마이톤 - KCC 마이톤 MT420 15T 395*1210", "unit": "장", "price": 52500}, {"name": "마이톤 - KCC 마이톤 MT420 15T 395*1500", "unit": "장", "price": 65500}, {"name": "마이톤 - KCC 마이톤 MC4412 3D 15T 300*600", "unit": "장", "price": 44300}, {"name": "마이톤 - KCC 마이톤 MC4412 6D 15T 300*600", "unit": "장", "price": 44300}, {"name": "SMC - SMC 300*300 (평,원,사각) / EA", "unit": "개", "price": 1660}, {"name": "SMC - SMC 450*450 (평,원,사각) / EA", "unit": "개", "price": 3150}, {"name": "SMC - SMC 600*600 (평,원,사각) / EA", "unit": "개", "price": 4000}, {"name": "SMC - SMC 300*600 (평,원,사각) / EA", "unit": "개", "price": 2400}, {"name": "AL담파 - AL담파 300*300 (평,원,사각) / EA", "unit": "개", "price": 2900}, {"name": "AL담파 - AL담파 300*600 (평) / EA", "unit": "개", "price": 5250}, {"name": "AL담파 - AL담파 450*450 (평,원,사각) / EA", "unit": "개", "price": 5350}, {"name": "AL담파 - AL담파 600*600 (평,원,사각) / EA", "unit": "개", "price": 8350}, {"name": "금속천장재 - 금속 WMC 300*300 (평,원,사각) / EA", "unit": "장", "price": 1450}, {"name": "금속천장재 - 금속 WMC 450*450 (평,원,사각) / EA", "unit": "장", "price": 2400}, {"name": "금속천장재 - 금속 WMC 300*600 (평,원,사각) / EA", "unit": "장", "price": 2200}, {"name": "금속천장재 - 금속 WMC 600*600 (평,원,사각) / EA", "unit": "장", "price": 3650}, {"name": "스팬드럴 - 화이트 200S 스팬드럴 0.6T", "unit": "장", "price": 21150}, {"name": "스팬드럴 - 화이트 100S 스팬드럴 0.6T", "unit": "장", "price": 10350}, {"name": "스팬드럴 - 실버 200S 스팬드럴 0.6T", "unit": "장", "price": 21150}, {"name": "스팬드럴 - 실버 100S 스팬드럴 0.6T", "unit": "장", "price": 10350}, {"name": "프리미엄천장재 - 스크린루버", "unit": "장", "price": "전화 문의"}, {"name": "프리미엄천장재 - 그리드 루버", "unit": "장", "price": "전화 문의"}, {"name": "프리미엄천장재 - 어쿠스틱 사운드", "unit": "장", "price": "전화 문의"}, {"name": "프리미엄천장재 - EX 메탈 천장", "unit": "장", "price": "전화 문의"}, {"name": "경량벽체 - KS 50형 스터드 (M당)", "unit": "m", "price": 1220}, {"name": "경량벽체 - KS 65형 스터드 (M당)", "unit": "m", "price": 1290}, {"name": "경량벽체 - KS 75형 스터드 (M당)", "unit": "m", "price": 1480}, {"name": "경량벽체 - KS 90형 스터드 (M당)", "unit": "m", "price": 1840}, {"name": "경량벽체 - KS 100형 스터드 (M당)", "unit": "m", "price": 1640}, {"name": "경량벽체 - KS 125형 스터드 (M당)", "unit": "m", "price": 1980}, {"name": "경량벽체 - BS 150형 스터드 (M당)", "unit": "m", "price": 2590}, {"name": "경량벽체 - BS 65형 스터드 0.65T*65*40 (M당)", "unit": "m", "price": 2975}, {"name": "경량벽체 - BS 32형 스터드 0.6T*32*32 3M", "unit": "개", "price": 2840}, {"name": "경량벽체 - BS 32형 스터드 0.6T*32*32 4M", "unit": "개", "price": 3650}, {"name": "경량벽체 - KS 50형 런너 0.8T*52*40 3M", "unit": "개", "price": 3270}, {"name": "경량벽체 - KS 65형 런너 0.8T*67*40 3M", "unit": "개", "price": 3570}, {"name": "경량벽체 - KS 75형 런너 0.8T*77*40 3M", "unit": "개", "price": 3870}, {"name": "경량벽체 - KS 90형 런너 0.8T*92*40 3M", "unit": "개", "price": 4242}, {"name": "경량벽체 - KS 100형 런너 0.8T*102*40 3M", "unit": "개", "price": 4494}, {"name": "경량벽체 - BS 150형 런너 0.8T*152*40 3M", "unit": "개", "price": 5950}, {"name": "경량벽체 - 러너 32형 (BS) 0.6T*32*32", "unit": "개", "price": 2574}, {"name": "경량벽체 - 러너 42형 (BS) 0.6T*42*32", "unit": "개", "price": 2808}, {"name": "경량벽체 - CH-KS스터드 75형 0.8T*75*35 3M", "unit": "개", "price": 6072}, {"name": "경량벽체 - CH-KS 75형 스터드 0.8T*75*35 3.5M", "unit": "개", "price": 7700}, {"name": "경량벽체 - CH-KS 75형 스터드 0.8T*75*35 4M", "unit": "개", "price": 8800}, {"name": "경량벽체 - CH-KS스터드 92형 0.8T*90*35 (M당)", "unit": "m", "price": 2128}, {"name": "경량벽체 - CH-KS스터드 102형 0.8T*75*35 (M당)", "unit": "m", "price": 2266}, {"name": "경량벽체 - J-75 러너 0.5T*75*25 3M", "unit": "개", "price": 4160}, {"name": "경량벽체 - AW 74형 스터드 (주문)", "unit": "개", "price": 2821}, {"name": "경량벽체 - AW 90형 스터드 (주문)", "unit": "개", "price": 3003}, {"name": "경량벽체 - AW 100형 스터드 (주문)", "unit": "개", "price": 3094}, {"name": "경량벽체 - AW 124형 스터드 (주문)", "unit": "개", "price": 3302}, {"name": "경량벽체 - AW 150형 스터드 (주문)", "unit": "개", "price": 3588}, {"name": "경량벽체 - 전산볼트 (3/8, 9MM) /3M", "unit": "개", "price": 2100}, {"name": "경량벽체 - 전산볼트 (3/8, 9MM) /2M", "unit": "개", "price": 1420}, {"name": "경량벽체 - 전산볼트 (3/8, 9MM) /1M", "unit": "개", "price": 800}, {"name": "천장골조 - 엠바 ㉿ / 4M", "unit": "개", "price": 2040}, {"name": "천장골조 - 엠바 ㉿ / 2.7M", "unit": "개", "price": 1380}, {"name": "천장골조 - 엠바 (BS) / 4M", "unit": "개", "price": 1728}, {"name": "천장골조 - 엠바 (BS) / 2.7M", "unit": "개", "price": 1166}, {"name": "천장골조 - 캐링찬넬 (BS) / 4M", "unit": "개", "price": 2544}, {"name": "천장골조 - 캐링찬넬 (BS) / 2.7M", "unit": "개", "price": 1717}, {"name": "천장골조 - 캐링찬넬 ㉿ / 4M", "unit": "개", "price": 2680}, {"name": "천장골조 - 캐링찬넬 ㉿ / 2.7M", "unit": "개", "price": 1810}, {"name": "천장골조 - 아파트 엠바 36형", "unit": "개", "price": 980}, {"name": "천장골조 - 아파트 엠바 (주공용)", "unit": "개", "price": 2064}, {"name": "천장골조 - 클립바 / 4M", "unit": "개", "price": 3000}, {"name": "천장골조 - 클립바 / 2.7M", "unit": "개", "price": 2050}, {"name": "천장골조 - 메인티바 15mm/ 아이보리 3658mm", "unit": "개", "price": 3196}, {"name": "천장골조 - 메인티바 25mm/ 아이보리 3658mm", "unit": "개", "price": 3196}, {"name": "천장골조 - 오메가티바 35*38 / 백색 3.6M", "unit": "개", "price": 7884}, {"name": "천장골조 - 크로스티바 15mm/아이보리 594mm", "unit": "개", "price": 435}, {"name": "천장골조 - 크로스티바 25mm/아이보리 305mm", "unit": "개", "price": 470}, {"name": "천장골조 - 크로스티바 25mm/아이보리 610mm", "unit": "개", "price": 495}, {"name": "천장골조 - 크로스티바 25mm/아이보리 1210mm", "unit": "개", "price": 990}, {"name": "천장골조 - 모듈바(도장) 70*38 / 4M", "unit": "개", "price": 4400}, {"name": "천장골조 - 내진천정틀 M-BAR M2당", "unit": "㎡", "price": "전화 문의"}, {"name": "천장골조 - 내진천정틀 CILP-BAR M2당", "unit": "㎡", "price": "전화 문의"}, {"name": "천장골조 - 내진천정틀 T-BAR M2당", "unit": "㎡", "price": "전화 문의"}, {"name": "천장골조 - 마이너찬넬 ㉿ / 기성품4M", "unit": "개", "price": 2120}, {"name": "천장골조 - 파워바 30형 0.45*30*40 / 4M", "unit": "개", "price": 5200}, {"name": "천장골조 - 파워바 50형 0.45*50*40 / 4M", "unit": "개", "price": 6240}, {"name": "천장골조 - 일반 C찬넬 1.2T*32*45 / 4M", "unit": "개", "price": 8000}, {"name": "점검구 - (실버) AL 개폐식 점검구 300*300", "unit": "개", "price": 8900}, {"name": "점검구 - (실버) AL 개폐식 점검구 450*450", "unit": "개", "price": 10000}, {"name": "점검구 - (실버) AL 개폐식 점검구 600*600", "unit": "개", "price": 11300}, {"name": "점검구 - (화이트) AL 개폐식 점검구 300*300", "unit": "개", "price": 10100}, {"name": "점검구 - (화이트) AL 개폐식 점검구 450*450", "unit": "개", "price": 11500}, {"name": "점검구 - (화이트) AL 개폐식 점검구 600*600", "unit": "개", "price": 13200}, {"name": "점검구 - (화이트) 밀폐형 점검구 500*500", "unit": "개", "price": 11800}, {"name": "점검구 - 금속/ 동전점검구 9.5T 2P 450*450", "unit": "개", "price": 23500}, {"name": "점검구 - 금속/ 동전점검구(체인O) 450*450", "unit": "개", "price": 27000}, {"name": "점검구 - 금속/ 동전점검구 9.5T 1P 450*450", "unit": "개", "price": 22500}, {"name": "점검구 - 금속/모자형점검구 450*450 (2P)", "unit": "개", "price": 21000}, {"name": "AL몰딩 - (화이트) AL앵글몰딩 19*19", "unit": "개", "price": 2480}, {"name": "AL몰딩 - (실버/무도장) AL앵글몰딩 19*19", "unit": "개", "price": 2080}, {"name": "AL몰딩 - (화이트) ALㄷ몰딩 15*30", "unit": "개", "price": 3490}, {"name": "AL몰딩 - (실버) ALㄷ몰딩 15*30", "unit": "개", "price": 3490}, {"name": "AL몰딩 - (아이보리) ALㄷ몰딩 15*30", "unit": "개", "price": 3490}, {"name": "AL몰딩 - (화이트) 메지몰딩 T형 1P용 9mm", "unit": "개", "price": 3200}, {"name": "AL몰딩 - (화이트) 메지몰딩 T형 1P용 12mm", "unit": "개", "price": 3400}, {"name": "AL몰딩 - (실버) ST앵글몰딩 22*22", "unit": "개", "price": 3700}, {"name": "AL몰딩 - (화이트) ST앵글몰딩 22*22", "unit": "개", "price": 3700}, {"name": "AL몰딩 - (화이트) AL갈매기몰딩 15*15", "unit": "개", "price": 3490}, {"name": "AL몰딩 - (실버/무도장) AL갈매기몰딩 15*15", "unit": "개", "price": 3190}, {"name": "건축용일반합판 - 알비자합판 (동남아)A+ 8.5T 910*1820", "unit": "장", "price": 9900}, {"name": "건축용일반합판 - 알비자합판 (동남아)A+ 11.5T 910*1820", "unit": "장", "price": 10800}, {"name": "건축용일반합판 - 일반합판 (동남아산) 2.7T 1220*2440", "unit": "장", "price": 8500}, {"name": "건축용일반합판 - 일반합판 (동남아산/알비자) 4.6T 1220*2440", "unit": "장", "price": 9700}, {"name": "건축용일반합판 - 알비자합판 (동남아산) 8.5T 1220*2440", "unit": "장", "price": 14900}, {"name": "건축용일반합판 - 알비자합판 (동남아산) 11.5T 1220*2440", "unit": "장", "price": 19000}, {"name": "건축용일반합판 - 알비자합판 (동남아산) 14.5T 1220*2440", "unit": "장", "price": 25800}, {"name": "건축용일반합판 - 알비자합판 (동남아산) 17.5T 1220*2440", "unit": "장", "price": 28500}, {"name": "건축용일반합판 - 최상급합판 (말레이시아) 8.5T 1220*2440", "unit": "장", "price": 23500}, {"name": "건축용일반합판 - 최상급합판 (말레이시아) 11.5T 1220*2440", "unit": "장", "price": 29500}, {"name": "기능성합판 - 태고합판(동남아산) 12T*1220*2440", "unit": "장", "price": 26700}, {"name": "기능성합판 - 요꼬(오징어)합판 4T*1220*2440", "unit": "장", "price": 15700}, {"name": "기능성합판 - 코아합판(알비자/연질)18T 1220*2440", "unit": "장", "price": 28800}, {"name": "기능성합판 - 방수(내수)합판 910*1820*12T", "unit": "장", "price": 18300}, {"name": "기능성합판 - 방수(내수)합판 1220*2440*12T", "unit": "장", "price": 25500}, {"name": "집성판 - 라디에타파인집성판[탑핑거] 4*8*15T", "unit": "장", "price": 42000}, {"name": "집성판 - 라디에타파인집성판[탑핑거] 4*8*18T", "unit": "장", "price": 67600}, {"name": "집성판 - 멀바우 집성목 S/F/J 12*910*2440", "unit": "장", "price": 46000}, {"name": "집성판 - 멀바우 집성목 S/F/J 18*910*2440", "unit": "장", "price": 56400}, {"name": "집성판 - 애쉬 집성목 18*1220*2440 S/F/J", "unit": "장", "price": 73000}, {"name": "집성판 - 아카시아 집성목(유절) 18T", "unit": "장", "price": 41000}, {"name": "목모보드 - 목모보드 600*1200*15T", "unit": "장", "price": 17000}, {"name": "목모보드 - 목모보드 600*600*15T", "unit": "장", "price": 9000}, {"name": "목모보드 - 목모보드 600*1200*25T", "unit": "장", "price": 21600}, {"name": "목모보드 - 목모보드 600*600*25T", "unit": "장", "price": 10800}, {"name": "목모보드 - 목모보드(도장) (추가비용) 600*1200*15T", "unit": "장", "price": 15600}, {"name": "자작합판 - 자작합판 4T 1220*2440(B/BB)", "unit": "장", "price": 21000}, {"name": "자작합판 - 자작합판 9T 1220*2440 (B/BB)", "unit": "장", "price": 44800}, {"name": "자작합판 - 자작합판 12T 1220*2440 (B/BB)", "unit": "장", "price": 55000}, {"name": "자작합판 - 자작합판 18T 1220*2440 (B/BB)", "unit": "장", "price": 75500}, {"name": "합성데크 - 합성데크 [다크브라운] 140*20T*2400", "unit": "장", "price": 12000}, {"name": "합성데크 - 합성데크 [다크브라운] 140*20T*3000", "unit": "장", "price": 15000}, {"name": "합성데크 - 합성데크 [다크브라운] 150*25T*2400", "unit": "장", "price": 17000}, {"name": "합성데크 - 합성데크 [다크브라운] 150*25T*3000", "unit": "장", "price": 20000}, {"name": "방부목데크 - 방부데크재 [레드파인/KD] 21*120*3600", "unit": "장", "price": 7500}, {"name": "방부목데크 - 방부데크재 [레드파인/KD] 25*140*3600", "unit": "장", "price": 11000}, {"name": "방부목데크 - 방부데크재 [레드파인/KD] 15*95*3600", "unit": "장", "price": 5600}, {"name": "흡음타공보드 - (메이플) MDF 원형타공 5mm 1200*2400*9T", "unit": "장", "price": 49000}, {"name": "흡음타공보드 - (메이플) MDF 라인타공 1184*2400*9T", "unit": "장", "price": 56000}, {"name": "흡음타공보드 - [주문] MDF 라인타공 1184*2400*9T", "unit": "장", "price": "전화 문의"}, {"name": "흡음타공보드 - [주문] MDF 원형타공 1200*2400*9T", "unit": "장", "price": "전화 문의"}, {"name": "중밀도MDF - MDF 1220*2440*3T (고밀도)", "unit": "장", "price": 4600}, {"name": "중밀도MDF - MDF 1220*2440*6T", "unit": "장", "price": 8500}, {"name": "중밀도MDF - MDF 1220*2440*9T", "unit": "장", "price": 10400}, {"name": "중밀도MDF - MDF 1220*2440*12T", "unit": "장", "price": 14400}, {"name": "중밀도MDF - MDF 1220*2440*15T", "unit": "장", "price": 18500}, {"name": "중밀도MDF - MDF 1220*2440*18T", "unit": "장", "price": 22000}, {"name": "고밀도MDF - (고밀도) MDF합판 1220*2440*4.5T", "unit": "장", "price": 8000}, {"name": "고밀도MDF - (고밀도) MDF합판 1220*2440*9T", "unit": "장", "price": 15400}, {"name": "고밀도MDF - (고밀도) MDF합판 1220*2440*12T", "unit": "장", "price": 19700}, {"name": "고밀도MDF - (고밀도) MDF합판 1220*2440*18T", "unit": "장", "price": 24300}, {"name": "OSB - OSB합판 1220*2440*8T", "unit": "장", "price": 10600}, {"name": "OSB - OSB합판 1220*2440*11.5T", "unit": "장", "price": 13700}, {"name": "OSB - OSB합판 1220*2440*18.3T", "unit": "장", "price": 23500}, {"name": "인테리어합판 - 미송합판(국산,유절) 4.8T 1220*2440", "unit": "장", "price": 15410}, {"name": "인테리어합판 - 미송합판(국산,유절) 8.5T 1220*2440", "unit": "장", "price": 26220}, {"name": "인테리어합판 - 미송합판(국산,유절) 12T 1220*2440", "unit": "장", "price": 30500}, {"name": "인테리어합판 - 낙엽송합판[엠보] / 7.5T", "unit": "장", "price": 30500}, {"name": "소송각재 - 건조 소송다루끼 (완전건조) 30*30*2400", "unit": "개", "price": 23000}, {"name": "소송각재 - 건조 소송다루끼 (완전건조) 30*30*3600", "unit": "개", "price": 31000}, {"name": "소송각재 - 건조 소송투바이(완전건조) 30*69*3600", "unit": "개", "price": 36000}, {"name": "소송각재 - 건조 소송나나부(반다루끼) 21*30*3600", "unit": "개", "price": 25000}, {"name": "소송각재 - 뉴송각재 오비끼 / 81*81*3600 (EA)", "unit": "개", "price": 11000}, {"name": "소송각재 - 뉴송각재 폼다루끼 / 39*51*3600 (단)", "unit": "단", "price": 18500}, {"name": "뉴송/라왕각재 - 라왕 심재 / 30*40*2400 (EA)", "unit": "개", "price": 2500}, {"name": "뉴송/라왕각재 - 라왕 후지감 / 10*40*2100 (EA)", "unit": "개", "price": 1560}, {"name": "뉴송/라왕각재 - 라왕각재(집성,다루끼) / 28*28*3600 (EA)", "unit": "개", "price": 3000}, {"name": "방부목 - 방부목[2X2] / 38*38*3600", "unit": "개", "price": 5100}, {"name": "방부목 - 방부목[2X4] / 38*89*3600", "unit": "개", "price": 10000}, {"name": "방부목 - 방부목[2X6] / 38*140*3600", "unit": "개", "price": 16200}, {"name": "방부목 - 방부목[2X8] / 38*185*3600", "unit": "개", "price": 25000}, {"name": "방부목 - 방부목 민자[4X4] / 90*90*3600", "unit": "개", "price": 25900}, {"name": "방부목 - 방부목크로바[4X4] 90X90X3600", "unit": "개", "price": 28600}, {"name": "보양자재및부자재 - 반코팅장갑 (10EA)", "unit": "포", "price": 2000}, {"name": "보양자재및부자재 - 적색마대 80KG, 끈유 (50매)", "unit": "포", "price": 11500}, {"name": "보양자재및부자재 - 플라베니아 2.5T 900*1800 (단/20EA)", "unit": "개", "price": 56000}, {"name": "보양자재및부자재 - 롤천막(텐텐지) 1800*90(롤)", "unit": "롤", "price": 35500}, {"name": "보양자재및부자재 - 롤천막(텐텐지) 1000*85(롤)", "unit": "롤", "price": 29000}, {"name": "보양자재및부자재 - 비닐 0.05T 1800*45", "unit": "개", "price": 19000}, {"name": "보양자재및부자재 - 목공본드 목공용접착제 (205, 705)", "unit": "포", "price": 2800}, {"name": "보양자재및부자재 - 우레탄폼(건용 / 750ML / EA)", "unit": "통", "price": 4700}, {"name": "보양자재및부자재 - 폼본드(건용/ 750ML/ EA)", "unit": "통", "price": 7500}, {"name": "아트보드 - K(단순컬러)아트보드비방염 1220*2440*9T", "unit": "장", "price": 18600}, {"name": "아트보드 - K(기타 컬러)아트보드비방염 1220*2440*9T", "unit": "장", "price": 19850}, {"name": "아트보드 - K(단순컬러)아트보드방염 1220*2440*9T", "unit": "장", "price": 28850}, {"name": "아트보드 - K아트보드비방염 1220*2440*12T", "unit": "장", "price": 24150}, {"name": "아트보드 - K타공아트보드비방염 600*1200*9T", "unit": "장", "price": 6900}, {"name": "아트보드 - K가공아트보드비방염 600*1200*9T", "unit": "장", "price": 6080}, {"name": "아트보드 - K가공(컬러)아트보드비방염 600*1200*9T", "unit": "장", "price": 6160}, {"name": "아트보드 - K가공아트보드비방염 600*600*9T", "unit": "장", "price": 2980}, {"name": "아트보드 - K가공(컬러)아트보드비방염 600*600*9T", "unit": "장", "price": 3335}, {"name": "차음시트 - 점착형 차음시트 1000*1000*2T", "unit": "개", "price": 4700}, {"name": "차음시트 - 점착형 차음시트 1000*1000*3T", "unit": "개", "price": 6700}, {"name": "아연각파이프 - 아연각파이프 30*30 1.4T", "unit": "개", "price": 10350}, {"name": "아연각파이프 - 아연각파이프 50*50 2T", "unit": "개", "price": 26000}, {"name": "아연각파이프 - 아연각파이프 75*75 2T", "unit": "개", "price": 39000}, {"name": "아연각파이프 - 아연각파이프 100*100*2T", "unit": "개", "price": 58500}, {"name": "아연각파이프 - 아연각파이프 베이스판 200*200*9T", "unit": "개", "price": 6500}, {"name": "아연각파이프 - 아연각파이프 20*20 1.4T", "unit": "개", "price": 7245}, {"name": "아연각파이프 - 아연각파이프 20*40 1.5T", "unit": "개", "price": 16250}, {"name": "폼세라믹 - 발포세라믹폼 600*1200*30T", "unit": "장", "price": 22000}, {"name": "폼세라믹 - 발포세라믹폼 600*1200*50T", "unit": "장", "price": 32000}, {"name": "폼세라믹 - 발포세라믹폼 600*1200*80T", "unit": "장", "price": 50000}, {"name": "폼세라믹 - 발포세라믹폼 600*1200*100T", "unit": "장", "price": 60000}, {"name": "도어 - ABS 민자(백색) 837*2062 (우딘)", "unit": "개", "price": 90000}, {"name": "도어 - 3방 110바 (미는기준 우)문틀(백색)", "unit": "개", "price": "전화 문의"}, {"name": "도어 - 3방 110바 (미는기준 좌)문틀(백색)", "unit": "개", "price": "전화 문의"}, {"name": "도어 - ABS 타공도어 (~주문4일)", "unit": "개", "price": "전화 문의"}, {"name": "도어 - ABS 프리미엄도어 (~주문4일)", "unit": "개", "price": "전화 문의"}, {"name": "도어 - ABS 슬라이딩 (포켓도어) (~주문4일)", "unit": "개", "price": "전화 문의"}, {"name": "도어 - 3연동도어 (카다로그참조)", "unit": "개", "price": "전화 문의"}, {"name": "도어 - 2연동도어 (카다로그참조)", "unit": "개", "price": "전화 문의"}, {"name": "백골도어(가설용) - (두산)백골합판도어(실타) 835*2035*36T", "unit": "장", "price": 80800}, {"name": "백골도어(가설용) - (두산)백골문틀 라왕 / 편개 (식기무)", "unit": "개", "price": 55000}, {"name": "백골도어(가설용) - (두산)백골문틀 라왕 / 양개 (식기무)", "unit": "개", "price": 65000}, {"name": "샌드위치도어 - 샌드위치 도어(양개) 고정식 900*2100", "unit": "개", "price": 75000}, {"name": "샌드위치도어 - 샌드위치 도어(편개) 일반식 900*2100", "unit": "개", "price": 68500}, {"name": "샌드위치도어 - 샌드위치 프레임 / 50T(양개) 1800*2100", "unit": "개", "price": 40000}, {"name": "샌드위치도어 - 샌드위치 프레임 / 50T(편개) 900*2100", "unit": "개", "price": 31900}, {"name": "샌드위치도어 - 샌드위치 프레임 / 75T(양개) 1800*2100", "unit": "개", "price": 48700}, {"name": "샌드위치도어 - 샌드위치 프레임 / 75T(편개) 900*2100", "unit": "개", "price": 40000}, {"name": "재고판넬 - 샌드위치판넬 / 아이보리 50T (1000*3000)", "unit": "장", "price": 36000}, {"name": "재고판넬 - 샌드위치판넬 / 아이보리 50T (1000*3500)", "unit": "장", "price": 40850}, {"name": "주문제판넬 - EPS 일반/단열*나*/준불연(포켓) [소골/평판] (外0.37)", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 일반/단열*나*/준불연 [지붕3골] (外0.37)", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 일반/단열*나* [V-75] (外0.37)", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 준불연/그라스울/ [V-75] (外0.5)", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 일반/단열*나*/준불연 [모자이크] (外0.5)", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 일반/단열*나*/준불연 [징크] (外0.5)", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 일반/단열*나*/준불연 [메탈] (外0.6)", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 일반/단열*나*/준불연/그라스울 [250골]", "unit": "장", "price": "전화 문의"}, {"name": "주문제판넬 - EPS 일반/단열*나*/준불연/그라스울 [500골]", "unit": "장", "price": "전화 문의"}, {"name": "칼라강판 - 징크형 칼라강판 0.45T [폭820/유효폭750]", "unit": "장", "price": 9000}, {"name": "칼라강판 - 전통기와형 칼라강판 0.45T [폭820/유효폭700]", "unit": "장", "price": 9500}, {"name": "칼라강판 - 평기와형 칼라강판 0.45T [폭820/유효폭700]", "unit": "장", "price": 9500}, {"name": "칼라강판 - S골형 칼라강판 0.45T [폭800/유효폭730]", "unit": "장", "price": 9000}, {"name": "칼라강판 - 파라펫 칼라강판 0.45T [폭880/유효폭820]", "unit": "장", "price": 10000}, {"name": "칼라강판 - 징크형 PE폼 칼라강판 0.45T", "unit": "장", "price": 10400}, {"name": "칼라강판 - S골형 PE폼 칼라강판 0.45T", "unit": "장", "price": 10400}, {"name": "칼라강판 - 전통기와형 PE폼 칼라강판 0.45T", "unit": "장", "price": 10790}, {"name": "칼라강판 - 평기와형 PE폼 칼라강판 0.45T", "unit": "장", "price": 10790}, {"name": "바닥재 - LX, 유성, 현대, KCC 동신 [데코타일]", "unit": "장", "price": "전화 문의"}, {"name": "바닥재 - LX, 올고다, 동화, 구정, 디엔메종 [강마루]", "unit": "개", "price": "전화 문의"}];
@@ -2761,6 +2784,7 @@ function defaultData() {
     estimate: defaultEstimateData(),
     carpentry: defaultCarpentryData(),
     wallpaper: defaultWallpaperData(),
+    film: defaultFilmData(),
     quantityDefaultsCleared: true,
   };
 }
@@ -3663,6 +3687,141 @@ function WallpaperPanel({ data, onChange, onReset }) {
   );
 }
 
+/* ---------------------------------- 필름 계산기 (전용) ---------------------------------- */
+
+function FilmSpaceRow({ space, onChange, onRemove, removable }) {
+  const w = Number(space.w) || 0;
+  const h = Number(space.h) || 0;
+  const m2 = (w / 1000) * (h / 1000);
+  function set(field, value) { onChange({ ...space, [field]: value }); }
+  const inputStyle = { padding: "6px 8px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface };
+  return (
+    <div className="flex items-center gap-2 flex-wrap" style={{ paddingTop: 6, paddingBottom: 6 }}>
+      <input type="text" value={space.name} onChange={(e) => set("name", e.target.value)} placeholder="공간 이름" className="rounded text-sm" style={{ ...inputStyle, width: 110 }} />
+      <div className="flex items-center gap-1">
+        <input type="number" min="0" step="10" value={space.w} onChange={(e) => set("w", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 78 }} placeholder="가로" title="가로 (mm)" />
+        <span className="text-sm" style={{ color: COLORS.inkSoft }}>mm ×</span>
+        <input type="number" min="0" step="10" value={space.h} onChange={(e) => set("h", e.target.value)} className="mono rounded text-sm text-right" style={{ ...inputStyle, width: 78 }} placeholder="세로" title="세로 (mm)" />
+        <span className="text-sm" style={{ color: COLORS.inkSoft }}>mm</span>
+      </div>
+      <span className="mono text-xs" style={{ color: COLORS.inkMuted, minWidth: 60 }}>= {formatQty(m2)} ㎡</span>
+      <button onClick={onRemove} disabled={!removable} title="공간 삭제" className="rounded" style={{ marginLeft: "auto", padding: 5, color: removable ? COLORS.danger : COLORS.borderStrong, cursor: removable ? "pointer" : "not-allowed", background: "transparent" }}>
+        <Trash2 size={15} />
+      </button>
+    </div>
+  );
+}
+
+function FilmBlockCard({ block, onChange, onRemove, removable }) {
+  const { m2, pyeong } = computeFilmBlock(block);
+  function set(field, value) { onChange({ ...block, [field]: value }); }
+  function updateSpace(id, next) { onChange({ ...block, spaces: block.spaces.map((s) => (s.id === id ? next : s)) }); }
+  function addSpace() { onChange({ ...block, spaces: [...block.spaces, defaultFilmSpace()] }); }
+  function removeSpace(id) {
+    if (block.spaces.length <= 1) return;
+    onChange({ ...block, spaces: block.spaces.filter((s) => s.id !== id) });
+  }
+  const inputStyle = { padding: "7px 9px", border: `1px solid ${COLORS.border}`, color: COLORS.ink, background: COLORS.surface };
+  return (
+    <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, marginBottom: 14, overflow: "hidden" }}>
+      <div className="flex items-center gap-3 flex-wrap" style={{ padding: "14px 16px 10px" }}>
+        <label className="text-xs" style={{ color: COLORS.inkSoft }}>필름 이름</label>
+        <input type="text" value={block.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 거실 몰딩 필름" className="rounded text-sm" style={{ ...inputStyle, width: 200, fontWeight: 700 }} />
+        <button onClick={onRemove} disabled={!removable} title="필름지 삭제" className="rounded" style={{ marginLeft: "auto", padding: "7px 10px", color: removable ? COLORS.danger : COLORS.borderStrong, background: "transparent", cursor: removable ? "pointer" : "not-allowed", fontSize: 12 }}>
+          삭제 ✕
+        </button>
+      </div>
+      <div style={{ padding: "0 16px 6px" }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+          <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>시공 면적</h3>
+          <button onClick={addSpace} className="flex items-center gap-1 text-sm" style={{ color: COLORS.accent, background: "transparent" }}>
+            <Plus size={14} /> 공간 추가
+          </button>
+        </div>
+        {block.spaces.map((s) => (
+          <FilmSpaceRow key={s.id} space={s} onChange={(next) => updateSpace(s.id, next)} onRemove={() => removeSpace(s.id)} removable={block.spaces.length > 1} />
+        ))}
+      </div>
+      <div className="flex items-center justify-end" style={{ padding: "10px 16px 14px", borderTop: `1px dashed ${COLORS.border}` }}>
+        <span className="mono text-sm font-semibold" style={{ color: COLORS.accentDark }}>{formatQty(pyeong)}평 / {formatQty(m2)}㎡</span>
+      </div>
+    </div>
+  );
+}
+
+function FilmPanel({ data, onChange, onReset }) {
+  const meta = CATEGORY_META.find((c) => c.key === "필름");
+  const Icon = meta.icon;
+  const blocks = data.blocks && data.blocks.length ? data.blocks : [defaultFilmBlock()];
+  const grandM2 = filmGrandTotal(data);
+  const grandPyeong = grandM2 / PYEONG_TO_M2;
+  const [showOrder, setShowOrder] = useState(false);
+
+  function updateBlock(id, next) { onChange((prev) => ({ ...prev, blocks: prev.blocks.map((b) => (b.id === id ? next : b)) })); }
+  function addBlock() { onChange((prev) => ({ ...prev, blocks: [...prev.blocks, defaultFilmBlock()] })); }
+  function removeBlock(id) { onChange((prev) => (prev.blocks.length <= 1 ? prev : { ...prev, blocks: prev.blocks.filter((b) => b.id !== id) })); }
+
+  function buildOrderRows() {
+    return blocks
+      .map((b, idx) => {
+        const r = computeFilmBlock(b);
+        const spaceNames = (b.spaces || []).map((s) => s.name).filter(Boolean).join(", ");
+        return {
+          name: b.name || `필름지 ${idx + 1}`,
+          spec: "시공면적",
+          qty: `${formatQty(r.m2)}㎡(${formatQty(r.pyeong)}평)`,
+          location: spaceNames || `공간 ${idx + 1}`,
+          note: "",
+          m2: r.m2,
+        };
+      })
+      .filter((row) => row.m2 > 0);
+  }
+
+  return (
+    <div>
+      <div className="no-print flex items-start justify-between flex-wrap gap-3" style={{ marginBottom: 16 }}>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center rounded-lg" style={{ width: 40, height: 40, background: COLORS.accentSoft, color: COLORS.accent }}>
+            <Icon size={20} />
+          </div>
+          <div>
+            <h2 className="font-semibold" style={{ fontSize: 18, color: COLORS.ink }}>필름</h2>
+            <p className="text-sm" style={{ color: COLORS.inkSoft }}>필름지별로 시공 공간의 가로×세로(mm)를 입력하면 면적(㎡·평)을 자동 계산합니다.</p>
+          </div>
+        </div>
+        <button onClick={onReset} className="flex items-center gap-1 rounded-lg text-sm" style={{ padding: "7px 12px", border: `1px solid ${COLORS.border}`, color: COLORS.inkSoft, background: COLORS.surface }}>
+          <RotateCcw size={14} /> 초기화
+        </button>
+      </div>
+
+      <div className="no-print">
+      <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+        <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>필름지 산정</h3>
+        <button onClick={addBlock} className="flex items-center gap-1 text-sm" style={{ color: COLORS.accent, background: "transparent" }}>
+          <Plus size={14} /> 필름지 추가
+        </button>
+      </div>
+      {blocks.map((b) => (
+        <FilmBlockCard key={b.id} block={b} onChange={(next) => updateBlock(b.id, next)} onRemove={() => removeBlock(b.id)} removable={blocks.length > 1} />
+      ))}
+
+      <div className="rounded-xl flex items-center justify-between flex-wrap gap-4" style={{ background: COLORS.accent, color: "#fff", padding: "20px 22px", marginTop: 6 }}>
+        <div>
+          <div style={{ fontSize: 12, color: "#C9C4B8", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>전체 시공 면적 합계</div>
+          <div className="mono" style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>{formatQty(grandPyeong)}평 / {formatQty(grandM2)}㎡</div>
+        </div>
+        <button onClick={() => setShowOrder(true)} className="rounded-lg text-sm font-bold" style={{ padding: "13px 22px", border: "none", background: COLORS.amber, color: COLORS.accentDark }}>
+          발주서 작성
+        </button>
+      </div>
+      </div>
+
+      {showOrder && <OrderFormSheet rows={buildOrderRows()} onClose={() => setShowOrder(false)} />}
+    </div>
+  );
+}
+
 function QuantityCategoryPanel({ catKey, meta, catState, onUpdateArea, onAddArea, onRemoveArea, onUpdateItem, onAddItem, onRemoveItem, onResetCategory, onUpdateOptions }) {
   const totalPyeong = categoryTotalPyeong(catState);
   const totalM2 = totalPyeong * PYEONG_TO_M2;
@@ -3780,7 +3939,7 @@ function QuantityCategoryPanel({ catKey, meta, catState, onUpdateArea, onAddArea
   );
 }
 
-function QuantitySummaryPanel({ data, carpentry, wallpaper }) {
+function QuantitySummaryPanel({ data, carpentry, wallpaper, film }) {
   const carpentryTotals = carpentryGrandTotals(carpentry);
   const carpentryEnabled = carpentry.enabledMaterials || DEFAULT_CARPENTRY_ENABLED;
   const carpentryRows = [
@@ -3792,6 +3951,12 @@ function QuantitySummaryPanel({ data, carpentry, wallpaper }) {
     name: b.name || `벽지 ${idx + 1}`,
     unit: "롤",
     qty: computeWallpaperBlock(b).rolls,
+  }));
+  const filmRows = (film.blocks || []).map((b, idx) => ({
+    id: b.id,
+    name: b.name || `필름지 ${idx + 1}`,
+    unit: "㎡",
+    qty: computeFilmBlock(b).m2,
   }));
   return (
     <div className="print-area">
@@ -3825,8 +3990,8 @@ function QuantitySummaryPanel({ data, carpentry, wallpaper }) {
           </thead>
           <tbody>
             {CATEGORY_KEYS.map((k) => {
-              if (k === "목공" || k === "도배지") {
-                const rows = k === "목공" ? carpentryRows : wallpaperRows;
+              if (k === "목공" || k === "도배지" || k === "필름") {
+                const rows = k === "목공" ? carpentryRows : k === "도배지" ? wallpaperRows : filmRows;
                 return (
                   <Fragment key={k}>
                     <tr>
@@ -4292,6 +4457,7 @@ function InteriorToolkit({ onBack }) {
             // 목공/도배지 전용 계산기 데이터 — 이 기능이 생기기 전에 저장된 데이터에는 없으므로 기본값을 채워줍니다.
             if (!parsed.carpentry) parsed.carpentry = defaultCarpentryData();
             if (!parsed.wallpaper) parsed.wallpaper = defaultWallpaperData();
+            if (!parsed.film) parsed.film = defaultFilmData();
             setData(parsed);
           }
         }
@@ -4435,7 +4601,7 @@ function InteriorToolkit({ onBack }) {
   }
   function resetAllQuantity() {
     askConfirm("물량 계산기 전체를 초기화할까요? 입력한 모든 면적 데이터가 사라집니다.", () => {
-      setData((prev) => ({ ...prev, quantity: defaultQuantityData(), carpentry: defaultCarpentryData(), wallpaper: defaultWallpaperData() }));
+      setData((prev) => ({ ...prev, quantity: defaultQuantityData(), carpentry: defaultCarpentryData(), wallpaper: defaultWallpaperData(), film: defaultFilmData() }));
       showToast("success", "물량 계산기를 초기화했습니다.");
     });
   }
@@ -4451,11 +4617,20 @@ function InteriorToolkit({ onBack }) {
       showToast("success", "도배지 계산기를 초기화했습니다.");
     });
   }
+  function resetFilm() {
+    askConfirm("필름 계산기를 초기화할까요? 입력한 모든 필름지 데이터가 사라집니다.", () => {
+      setData((prev) => ({ ...prev, film: defaultFilmData() }));
+      showToast("success", "필름 계산기를 초기화했습니다.");
+    });
+  }
   function updateCarpentry(updater) {
     setData((prev) => ({ ...prev, carpentry: typeof updater === "function" ? updater(prev.carpentry) : updater }));
   }
   function updateWallpaper(updater) {
     setData((prev) => ({ ...prev, wallpaper: typeof updater === "function" ? updater(prev.wallpaper) : updater }));
+  }
+  function updateFilm(updater) {
+    setData((prev) => ({ ...prev, film: typeof updater === "function" ? updater(prev.film) : updater }));
   }
 
   /* ---- estimate handlers ---- */
@@ -4633,6 +4808,8 @@ function InteriorToolkit({ onBack }) {
                         ? `${data.carpentry.blocks.length}개 공간`
                         : c.key === "도배지"
                         ? `${wallpaperGrandTotal(data.wallpaper)}롤`
+                        : c.key === "필름"
+                        ? `${formatQty(filmGrandTotal(data.film) / PYEONG_TO_M2)}평`
                         : `${formatQty(categoryTotalPyeong(data.quantity.categories[c.key]))}평`
                     }
                   />
@@ -4699,11 +4876,13 @@ function InteriorToolkit({ onBack }) {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "24px" }}>
         {mode === "quantity" ? (
           activeCategory === "요약" ? (
-            <QuantitySummaryPanel data={data.quantity} carpentry={data.carpentry} wallpaper={data.wallpaper} />
+            <QuantitySummaryPanel data={data.quantity} carpentry={data.carpentry} wallpaper={data.wallpaper} film={data.film} />
           ) : activeCategory === "목공" ? (
             <CarpentryPanel data={data.carpentry} onChange={updateCarpentry} onReset={resetCarpentry} />
           ) : activeCategory === "도배지" ? (
             <WallpaperPanel data={data.wallpaper} onChange={updateWallpaper} onReset={resetWallpaper} />
+          ) : activeCategory === "필름" ? (
+            <FilmPanel data={data.film} onChange={updateFilm} onReset={resetFilm} />
           ) : (
             <QuantityCategoryPanel
               catKey={activeCategory}
