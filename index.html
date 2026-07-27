@@ -2576,8 +2576,8 @@ const CATEGORY_META = [
 const CATEGORY_KEYS = CATEGORY_META.map((c) => c.key);
 
 /* ---- 목공 계산기: MDF/석고보드/템바보드 규격 + 다루끼/투바이·몰딩 산출 ---- */
-const MDF_W = 1200, MDF_H = 2440;
-const GY_W = 900, GY_H = 1800;
+const MDF_W = 1200, MDF_H = 2440, MDF_THICK = "9T";
+const GY_W = 900, GY_H = 1800, GY_THICK = "9.5T";
 const TB_W = 1220, TB_H = 2440;
 const JJ_LEN = 3600, JJ_GAP = 450;
 const MOLD_LEN = 2400;
@@ -3204,9 +3204,9 @@ function MoldingBlockCard({ block, onChange, onRemove, removable }) {
 function OrderFormSheet({ rows, onClose }) {
   const [meta, setMeta] = useState({ address: "", deliveryDate: "", requester: "", phone: "" });
   function set(field, value) { setMeta((m) => ({ ...m, [field]: value })); }
-  const MIN_ROWS = 11;
+  const MIN_ROWS = 15;
   const padCount = Math.max(0, MIN_ROWS - rows.length);
-  const inputStyle = { border: "none", borderBottom: "1px solid #ccc", fontSize: 12, background: "transparent", color: "#222", padding: "1px 4px", fontFamily: "inherit" };
+  const inputStyle = { border: "none", borderBottom: "1px solid #ccc", fontSize: 14, background: "transparent", color: "#222", padding: "1px 4px", fontFamily: "inherit" };
 
   return (
     <div className="print-area" style={{ marginTop: 18 }}>
@@ -3222,51 +3222,51 @@ function OrderFormSheet({ rows, onClose }) {
         </div>
       </div>
 
-      <div style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "26px 40px", maxWidth: 860, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 14 }}>
-          <div style={{ fontFamily: "'Noto Serif KR', serif", fontSize: 22, letterSpacing: 5, color: "#222" }}>SAYOU</div>
-          <div style={{ fontSize: 8.5, letterSpacing: 3, color: "#888", marginTop: 3 }}>ARCHITECTURE&nbsp;&nbsp;|&nbsp;&nbsp;DESIGN</div>
+      <div style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "31px 48px", maxWidth: 860, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 17 }}>
+          <div style={{ fontFamily: "'Noto Serif KR', serif", fontSize: 26, letterSpacing: 6, color: "#222" }}>SAYOU</div>
+          <div style={{ fontSize: 10, letterSpacing: 3, color: "#888", marginTop: 4 }}>ARCHITECTURE&nbsp;&nbsp;|&nbsp;&nbsp;DESIGN</div>
         </div>
-        <h2 style={{ textAlign: "center", fontSize: 17, fontWeight: 800, letterSpacing: 6, marginBottom: 16, color: "#111" }}>발 주 요 청 서</h2>
+        <h2 style={{ textAlign: "center", fontSize: 20, fontWeight: 800, letterSpacing: 6, marginBottom: 19, color: "#111" }}>발 주 요 청 서</h2>
 
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, fontSize: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, fontSize: 14 }}>
           <tbody>
             <tr>
-              <td style={{ border: "1px solid #333", padding: "4px 10px", fontWeight: 700, width: 120, background: "#FAFAF8" }}>수 령 주 소</td>
-              <td style={{ border: "1px solid #333", padding: "4px 10px" }}>
+              <td style={{ border: "1px solid #333", padding: "5px 12px", fontWeight: 700, width: 120, background: "#FAFAF8" }}>수 령 주 소</td>
+              <td style={{ border: "1px solid #333", padding: "5px 12px" }}>
                 <input value={meta.address} onChange={(e) => set("address", e.target.value)} placeholder="수령 주소를 입력하세요" style={{ ...inputStyle, width: "100%" }} />
               </td>
             </tr>
             <tr>
-              <td style={{ border: "1px solid #333", padding: "4px 10px", fontWeight: 700, background: "#FAFAF8" }}>배 송 요 청 일</td>
-              <td style={{ border: "1px solid #333", padding: "4px 10px" }}>
+              <td style={{ border: "1px solid #333", padding: "5px 12px", fontWeight: 700, background: "#FAFAF8" }}>배 송 요 청 일</td>
+              <td style={{ border: "1px solid #333", padding: "5px 12px" }}>
                 <input type="date" value={meta.deliveryDate} onChange={(e) => set("deliveryDate", e.target.value)} style={inputStyle} />
               </td>
             </tr>
           </tbody>
         </table>
 
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr>
               {["품 목", "치 수", "수 량", "위 치", "비 고"].map((h) => (
-                <th key={h} style={{ border: "1px solid #333", padding: "4px 6px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
+                <th key={h} style={{ border: "1px solid #333", padding: "5px 7px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.name}</td>
-                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.spec}</td>
-                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.qty}</td>
-                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.location}</td>
-                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.note}</td>
+                <td style={{ border: "1px solid #333", padding: "5px 7px", textAlign: "center" }}>{r.name}</td>
+                <td style={{ border: "1px solid #333", padding: "5px 7px", textAlign: "center" }}>{r.spec}</td>
+                <td style={{ border: "1px solid #333", padding: "5px 7px", textAlign: "center" }}>{r.qty}</td>
+                <td style={{ border: "1px solid #333", padding: "5px 7px", textAlign: "center" }}>{r.location}</td>
+                <td style={{ border: "1px solid #333", padding: "5px 7px", textAlign: "center" }}>{r.note}</td>
               </tr>
             ))}
             {Array.from({ length: padCount }).map((_, i) => (
               <tr key={`pad-${i}`}>
-                <td style={{ border: "1px solid #333", padding: "7px 6px" }}>&nbsp;</td>
+                <td style={{ border: "1px solid #333", padding: "8px 7px" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
@@ -3276,7 +3276,7 @@ function OrderFormSheet({ rows, onClose }) {
           </tbody>
         </table>
 
-        <div style={{ textAlign: "right", marginTop: 16, fontSize: 12, lineHeight: 1.7, color: "#222" }}>
+        <div style={{ textAlign: "right", marginTop: 19, fontSize: 14, lineHeight: 2, color: "#222" }}>
           <div>사유공간</div>
           <div>발주자 : <input value={meta.requester} onChange={(e) => set("requester", e.target.value)} placeholder="이름" style={{ ...inputStyle, width: 120 }} /></div>
           <div>연락처 : <input value={meta.phone} onChange={(e) => set("phone", e.target.value)} placeholder="연락처" style={{ ...inputStyle, width: 140 }} /></div>
@@ -3311,8 +3311,8 @@ function CarpentryPanel({ data, onChange, onReset }) {
   function buildOrderRows() {
     const rows = [];
     const specByKey = {
-      mdf: `${MDF_W}×${MDF_H}mm`,
-      gy: `${GY_W}×${GY_H}mm`,
+      mdf: `${MDF_W}×${MDF_H}×${MDF_THICK}mm`,
+      gy: `${GY_W}×${GY_H}×${GY_THICK}mm`,
       jj: `${JJ_LEN}mm(길이)`,
       tb: `${TB_W}×${TB_H}mm`,
     };
@@ -3362,8 +3362,8 @@ function CarpentryPanel({ data, onChange, onReset }) {
         <h3 className="text-sm font-semibold" style={{ color: COLORS.ink, marginBottom: 10 }}>자재 규격 (고정값)</h3>
         <div className="flex flex-wrap gap-6">
           {[
-            { name: "MDF 합판", spec: `${MDF_W} × ${MDF_H} mm`, result: `유효면적: ${MDF_AREA.toFixed(3)} ㎡/장` },
-            { name: "석고보드", spec: `${GY_W} × ${GY_H} mm`, result: `유효면적: ${GY_AREA.toFixed(3)} ㎡/장` },
+            { name: "MDF 합판", spec: `${MDF_W} × ${MDF_H} × ${MDF_THICK} mm`, result: `유효면적: ${MDF_AREA.toFixed(3)} ㎡/장` },
+            { name: "석고보드", spec: `${GY_W} × ${GY_H} × ${GY_THICK} mm`, result: `유효면적: ${GY_AREA.toFixed(3)} ㎡/장` },
             { name: "다루끼 / 투바이", spec: `길이 ${JJ_LEN} mm · 배치간격 ${JJ_GAP} mm`, result: null },
             { name: "템바보드", spec: `${TB_W} × ${TB_H} mm`, result: `유효면적: ${TB_AREA.toFixed(3)} ㎡/장` },
             { name: "걸레받이 / 몰딩", spec: `길이 ${MOLD_LEN} mm`, result: null },
