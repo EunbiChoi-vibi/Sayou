@@ -3204,9 +3204,9 @@ function MoldingBlockCard({ block, onChange, onRemove, removable }) {
 function OrderFormSheet({ rows, onClose }) {
   const [meta, setMeta] = useState({ address: "", deliveryDate: "", requester: "", phone: "" });
   function set(field, value) { setMeta((m) => ({ ...m, [field]: value })); }
-  const MIN_ROWS = 15;
+  const MIN_ROWS = 11;
   const padCount = Math.max(0, MIN_ROWS - rows.length);
-  const inputStyle = { border: "none", borderBottom: "1px solid #ccc", fontSize: 12.5, background: "transparent", color: "#222", padding: "2px 4px", fontFamily: "inherit" };
+  const inputStyle = { border: "none", borderBottom: "1px solid #ccc", fontSize: 12, background: "transparent", color: "#222", padding: "1px 4px", fontFamily: "inherit" };
 
   return (
     <div className="print-area" style={{ marginTop: 18 }}>
@@ -3222,51 +3222,51 @@ function OrderFormSheet({ rows, onClose }) {
         </div>
       </div>
 
-      <div style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "40px 44px", maxWidth: 860, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 26 }}>
-          <div style={{ fontFamily: "'Noto Serif KR', serif", fontSize: 26, letterSpacing: 6, color: "#222" }}>SAYOU</div>
-          <div style={{ fontSize: 9, letterSpacing: 3, color: "#888", marginTop: 4 }}>ARCHITECTURE&nbsp;&nbsp;|&nbsp;&nbsp;DESIGN</div>
+      <div style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "26px 40px", maxWidth: 860, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 14 }}>
+          <div style={{ fontFamily: "'Noto Serif KR', serif", fontSize: 22, letterSpacing: 5, color: "#222" }}>SAYOU</div>
+          <div style={{ fontSize: 8.5, letterSpacing: 3, color: "#888", marginTop: 3 }}>ARCHITECTURE&nbsp;&nbsp;|&nbsp;&nbsp;DESIGN</div>
         </div>
-        <h2 style={{ textAlign: "center", fontSize: 19, fontWeight: 800, letterSpacing: 6, marginBottom: 26, color: "#111" }}>발 주 요 청 서</h2>
+        <h2 style={{ textAlign: "center", fontSize: 17, fontWeight: 800, letterSpacing: 6, marginBottom: 16, color: "#111" }}>발 주 요 청 서</h2>
 
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, fontSize: 12.5 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, fontSize: 12 }}>
           <tbody>
             <tr>
-              <td style={{ border: "1px solid #333", padding: "7px 10px", fontWeight: 700, width: 120, background: "#FAFAF8" }}>수 령 주 소</td>
-              <td style={{ border: "1px solid #333", padding: "7px 10px" }}>
+              <td style={{ border: "1px solid #333", padding: "4px 10px", fontWeight: 700, width: 120, background: "#FAFAF8" }}>수 령 주 소</td>
+              <td style={{ border: "1px solid #333", padding: "4px 10px" }}>
                 <input value={meta.address} onChange={(e) => set("address", e.target.value)} placeholder="수령 주소를 입력하세요" style={{ ...inputStyle, width: "100%" }} />
               </td>
             </tr>
             <tr>
-              <td style={{ border: "1px solid #333", padding: "7px 10px", fontWeight: 700, background: "#FAFAF8" }}>배 송 요 청 일</td>
-              <td style={{ border: "1px solid #333", padding: "7px 10px" }}>
+              <td style={{ border: "1px solid #333", padding: "4px 10px", fontWeight: 700, background: "#FAFAF8" }}>배 송 요 청 일</td>
+              <td style={{ border: "1px solid #333", padding: "4px 10px" }}>
                 <input type="date" value={meta.deliveryDate} onChange={(e) => set("deliveryDate", e.target.value)} style={inputStyle} />
               </td>
             </tr>
           </tbody>
         </table>
 
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
           <thead>
             <tr>
               {["품 목", "치 수", "수 량", "위 치", "비 고"].map((h) => (
-                <th key={h} style={{ border: "1px solid #333", padding: "7px 6px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
+                <th key={h} style={{ border: "1px solid #333", padding: "4px 6px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.name}</td>
-                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.spec}</td>
-                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.qty}</td>
-                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.location}</td>
-                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.note}</td>
+                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.name}</td>
+                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.spec}</td>
+                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.qty}</td>
+                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.location}</td>
+                <td style={{ border: "1px solid #333", padding: "4px 6px", textAlign: "center" }}>{r.note}</td>
               </tr>
             ))}
             {Array.from({ length: padCount }).map((_, i) => (
               <tr key={`pad-${i}`}>
-                <td style={{ border: "1px solid #333", padding: "13px 6px" }}>&nbsp;</td>
+                <td style={{ border: "1px solid #333", padding: "7px 6px" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
@@ -3276,7 +3276,7 @@ function OrderFormSheet({ rows, onClose }) {
           </tbody>
         </table>
 
-        <div style={{ textAlign: "right", marginTop: 26, fontSize: 12.5, lineHeight: 2, color: "#222" }}>
+        <div style={{ textAlign: "right", marginTop: 16, fontSize: 12, lineHeight: 1.7, color: "#222" }}>
           <div>사유공간</div>
           <div>발주자 : <input value={meta.requester} onChange={(e) => set("requester", e.target.value)} placeholder="이름" style={{ ...inputStyle, width: 120 }} /></div>
           <div>연락처 : <input value={meta.phone} onChange={(e) => set("phone", e.target.value)} placeholder="연락처" style={{ ...inputStyle, width: 140 }} /></div>
