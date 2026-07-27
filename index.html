@@ -3288,7 +3288,7 @@ function OrderFormSheet({ rows, onClose }) {
           <thead>
             <tr>
               {["품 목", "치 수", "수 량", "비 고"].map((h) => (
-                <th key={h} style={{ border: "1px solid #333", padding: "10px 7px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
+                <th key={h} style={{ border: "1px solid #333", padding: "8px 7px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -3298,10 +3298,10 @@ function OrderFormSheet({ rows, onClose }) {
               const noteValue = noteEdits[key] !== undefined ? noteEdits[key] : (r.note || "");
               return (
                 <tr key={i}>
-                  <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.name}</td>
-                  <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.spec}</td>
-                  <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.qty}</td>
-                  <td style={{ border: "1px solid #333", padding: "10px 7px" }}>
+                  <td style={{ border: "1px solid #333", padding: "8px 7px", textAlign: "center" }}>{r.name}</td>
+                  <td style={{ border: "1px solid #333", padding: "8px 7px", textAlign: "center" }}>{r.spec}</td>
+                  <td style={{ border: "1px solid #333", padding: "8px 7px", textAlign: "center" }}>{r.qty}</td>
+                  <td style={{ border: "1px solid #333", padding: "8px 7px" }}>
                     <input value={noteValue} onChange={(e) => setNote(key, e.target.value)} placeholder="비고" style={noteInputStyle} />
                   </td>
                 </tr>
@@ -3311,10 +3311,10 @@ function OrderFormSheet({ rows, onClose }) {
               const key = `blank-${i}`;
               return (
                 <tr key={`pad-${i}`}>
-                  <td style={{ border: "1px solid #333", padding: "11px 7px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #333", padding: "9px 7px" }}>&nbsp;</td>
                   <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                   <td style={{ border: "1px solid #333" }}>&nbsp;</td>
-                  <td style={{ border: "1px solid #333", padding: "11px 7px" }}>
+                  <td style={{ border: "1px solid #333", padding: "9px 7px" }}>
                     <input value={noteEdits[key] || ""} onChange={(e) => setNote(key, e.target.value)} style={noteInputStyle} />
                   </td>
                 </tr>
