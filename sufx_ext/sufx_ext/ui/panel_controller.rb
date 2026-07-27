@@ -51,6 +51,11 @@ module Sufx
         tool&.toggle_support_from_panel(type.to_sym)
       end
 
+      dialog.add_action_callback('onConvertSupportHeightClick') do |_ctx, delta_mm|
+        tool = SufxConvertTool.active_instance
+        tool&.adjust_support_height_from_panel(delta_mm.to_f)
+      end
+
       dialog.add_action_callback('onMergeClick') do |_ctx|
         ok, msg = Commands::Merge.run!
         notify_result(dialog, ok, msg)

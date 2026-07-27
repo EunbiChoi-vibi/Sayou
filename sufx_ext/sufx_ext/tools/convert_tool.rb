@@ -20,9 +20,14 @@ module Sufx
     KEY_RETURN = 13
     KEY_B = 'B'.ord
     KEY_L = 'L'.ord
+    # +/- 키는 키보드 레이아웃/OS에 따라 실제로 전달되는 코드가 다를 수 있어(Windows
+    # OEM 키코드는 ASCII와 다름) 여러 후보를 같이 받는다 — 그래도 안 되는 환경을 위해
+    # 패널에도 동일 기능의 스테퍼 버튼(§panel.js onConvertSupportHeightClick)을 둔다.
     KEY_PLUS = '+'.ord
     KEY_EQUALS = '='.ord
+    KEY_OEM_PLUS = 187 # Windows VK_OEM_PLUS('='/'+' 키)
     KEY_MINUS = '-'.ord
+    KEY_OEM_MINUS = 189 # Windows VK_OEM_MINUS('-'/'_' 키)
 
     # 선택 유효성(그룹 1개)을 먼저 검사한 뒤 툴을 활성화한다.
     # door_thk_mm/body_gap_mm: 패널에 현재 입력된 DOOR THK/BODY GAP 값.
@@ -106,9 +111,9 @@ module Sufx
         toggle_support(:base)
       when KEY_L
         toggle_support(:leg)
-      when KEY_PLUS, KEY_EQUALS
+      when KEY_PLUS, KEY_EQUALS, KEY_OEM_PLUS
         adjust_support_height(Constants::SUPPORT_HEIGHT_STEP_MM)
-      when KEY_MINUS
+      when KEY_MINUS, KEY_OEM_MINUS
         adjust_support_height(-Constants::SUPPORT_HEIGHT_STEP_MM)
       when KEY_RETURN
         commit_grid!
@@ -124,6 +129,15 @@ module Sufx
     # 패널의 Base/Leg 버튼 클릭(마우스)에서 호출 — B/L 키와 동일하게 토글하고 화면을 갱신한다.
     def toggle_support_from_panel(type)
       toggle_support(type)
+      Sketchup.status_text = status_text
+      push_dimensions_to_panel
+      push_tool_state_to_panel
+      Sketchup.active_model.active_view.invalidate
+    end
+
+    # 패널의 +/- 스테퍼 버튼(마우스) 클릭에서 호출 — +/- 키와 동일하게 조정하고 화면을 갱신한다.
+    def adjust_support_height_from_panel(delta_mm)
+      adjust_support_height(delta_mm)
       Sketchup.status_text = status_text
       push_dimensions_to_panel
       push_tool_state_to_panel

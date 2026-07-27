@@ -32,6 +32,15 @@
     callRuby('onConvertBaseLegClick', 'leg');
   });
 
+  // Base/Leg 높이 +/- 스테퍼 — 키보드 +/- 키가 OS/키보드 레이아웃에 따라 안 먹는
+  // 경우가 있어(OEM 키코드 문제) 마우스로도 동일하게 조정할 수 있게 둔 버튼.
+  ['btn-support-minus', 'btn-support-plus'].forEach(function (id) {
+    var btn = document.getElementById(id);
+    btn.addEventListener('click', function () {
+      callRuby('onConvertSupportHeightClick', parseFloat(btn.dataset.delta));
+    });
+  });
+
   document.getElementById('btn-merge').addEventListener('click', function () {
     callRuby('onMergeClick');
   });
@@ -125,11 +134,18 @@
 
   // Convert 툴 activate/deactivate 시 호출 — active가 아니면 Base/Leg 버튼을 비활성화하고,
   // active면 활성화하면서 현재 켜진 타입(supportType: 'none'/'base'/'leg')을 강조 표시한다.
+  // +/- 스테퍼는 Base나 Leg가 실제로 켜져 있을 때만(조정할 대상이 있을 때만) 활성화한다.
   window.updateConvertToolState = function (active, supportType) {
     var baseBtn = document.getElementById('btn-convert-base');
     var legBtn = document.getElementById('btn-convert-leg');
+    var minusBtn = document.getElementById('btn-support-minus');
+    var plusBtn = document.getElementById('btn-support-plus');
+    var hasSupport = !!active && supportType !== 'none';
+
     baseBtn.disabled = !active;
     legBtn.disabled = !active;
+    minusBtn.disabled = !hasSupport;
+    plusBtn.disabled = !hasSupport;
     baseBtn.classList.toggle('active', !!active && supportType === 'base');
     legBtn.classList.toggle('active', !!active && supportType === 'leg');
   };
