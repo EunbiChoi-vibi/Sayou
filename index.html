@@ -3200,6 +3200,92 @@ function MoldingBlockCard({ block, onChange, onRemove, removable }) {
   );
 }
 
+/* ---- 발주요청서(사유공간 공식 양식) — 목공/도배지 계산기 공용 미리보기·인쇄 화면 ---- */
+function OrderFormSheet({ rows, onClose }) {
+  const [meta, setMeta] = useState({ address: "", deliveryDate: "", requester: "", phone: "" });
+  function set(field, value) { setMeta((m) => ({ ...m, [field]: value })); }
+  const MIN_ROWS = 15;
+  const padCount = Math.max(0, MIN_ROWS - rows.length);
+  const inputStyle = { border: "none", borderBottom: "1px solid #ccc", fontSize: 12.5, background: "transparent", color: "#222", padding: "2px 4px", fontFamily: "inherit" };
+
+  return (
+    <div className="print-area" style={{ marginTop: 18 }}>
+      <div className="no-print flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 12 }}>
+        <h3 className="font-semibold" style={{ fontSize: 15, color: COLORS.ink }}>발주요청서 미리보기 <span style={{ fontWeight: 400, color: COLORS.inkSoft, fontSize: 12 }}>· 수령주소·배송요청일·발주자 정보를 입력한 뒤 인쇄하면 PDF로 저장할 수 있어요</span></h3>
+        <div className="flex items-center gap-2">
+          <button onClick={() => window.print()} className="flex items-center gap-1 rounded-lg text-sm" style={{ padding: "7px 12px", border: `1px solid ${COLORS.accent}`, color: COLORS.accent, background: COLORS.surface }}>
+            <Printer size={14} /> 인쇄 / PDF 저장
+          </button>
+          <button onClick={onClose} className="rounded-lg text-sm" style={{ padding: "7px 12px", border: `1px solid ${COLORS.border}`, color: COLORS.inkSoft, background: COLORS.surface }}>
+            닫기
+          </button>
+        </div>
+      </div>
+
+      <div style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "40px 44px", maxWidth: 860, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 26 }}>
+          <div style={{ fontFamily: "'Noto Serif KR', serif", fontSize: 26, letterSpacing: 6, color: "#222" }}>SAYOU</div>
+          <div style={{ fontSize: 9, letterSpacing: 3, color: "#888", marginTop: 4 }}>ARCHITECTURE&nbsp;&nbsp;|&nbsp;&nbsp;DESIGN</div>
+        </div>
+        <h2 style={{ textAlign: "center", fontSize: 19, fontWeight: 800, letterSpacing: 6, marginBottom: 26, color: "#111" }}>발 주 요 청 서</h2>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, fontSize: 12.5 }}>
+          <tbody>
+            <tr>
+              <td style={{ border: "1px solid #333", padding: "7px 10px", fontWeight: 700, width: 120, background: "#FAFAF8" }}>수 령 주 소</td>
+              <td style={{ border: "1px solid #333", padding: "7px 10px" }}>
+                <input value={meta.address} onChange={(e) => set("address", e.target.value)} placeholder="수령 주소를 입력하세요" style={{ ...inputStyle, width: "100%" }} />
+              </td>
+            </tr>
+            <tr>
+              <td style={{ border: "1px solid #333", padding: "7px 10px", fontWeight: 700, background: "#FAFAF8" }}>배 송 요 청 일</td>
+              <td style={{ border: "1px solid #333", padding: "7px 10px" }}>
+                <input type="date" value={meta.deliveryDate} onChange={(e) => set("deliveryDate", e.target.value)} style={inputStyle} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr>
+              {["품 목", "치 수", "수 량", "위 치", "비 고"].map((h) => (
+                <th key={h} style={{ border: "1px solid #333", padding: "7px 6px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.name}</td>
+                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.spec}</td>
+                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.qty}</td>
+                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.location}</td>
+                <td style={{ border: "1px solid #333", padding: "7px 6px", textAlign: "center" }}>{r.note}</td>
+              </tr>
+            ))}
+            {Array.from({ length: padCount }).map((_, i) => (
+              <tr key={`pad-${i}`}>
+                <td style={{ border: "1px solid #333", padding: "13px 6px" }}>&nbsp;</td>
+                <td style={{ border: "1px solid #333" }}>&nbsp;</td>
+                <td style={{ border: "1px solid #333" }}>&nbsp;</td>
+                <td style={{ border: "1px solid #333" }}>&nbsp;</td>
+                <td style={{ border: "1px solid #333" }}>&nbsp;</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={{ textAlign: "right", marginTop: 26, fontSize: 12.5, lineHeight: 2, color: "#222" }}>
+          <div>사유공간</div>
+          <div>발주자 : <input value={meta.requester} onChange={(e) => set("requester", e.target.value)} placeholder="이름" style={{ ...inputStyle, width: 120 }} /></div>
+          <div>연락처 : <input value={meta.phone} onChange={(e) => set("phone", e.target.value)} placeholder="연락처" style={{ ...inputStyle, width: 140 }} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CarpentryPanel({ data, onChange, onReset }) {
   const meta = CATEGORY_META.find((c) => c.key === "목공");
   const Icon = meta.icon;
@@ -3208,7 +3294,6 @@ function CarpentryPanel({ data, onChange, onReset }) {
   const enabled = data.enabledMaterials || DEFAULT_CARPENTRY_ENABLED;
   const totals = carpentryGrandTotals(data);
   const [showOrder, setShowOrder] = useState(false);
-  const [hint, setHint] = useState("");
 
   function updateBlock(id, next) { onChange((prev) => ({ ...prev, blocks: prev.blocks.map((b) => (b.id === id ? next : b)) })); }
   function addBlock() { onChange((prev) => ({ ...prev, blocks: [...prev.blocks, defaultCarpentryBlock()] })); }
@@ -3223,53 +3308,40 @@ function CarpentryPanel({ data, onChange, onReset }) {
     });
   }
 
-  function buildOrderText() {
-    const lines = [];
-    lines.push("목공자재 발주서");
-    lines.push("작성일: " + new Date().toLocaleDateString("ko-KR"));
-    lines.push("─────────────────────────");
-    const unitByKey = { mdf: "장", gy: "장", jj: "개", tb: "장" };
-    const qtyByKeyFor = (r) => ({ mdf: r.mdfQty, gy: r.gyQty, jj: r.jjQty, tb: r.tbQty });
+  function buildOrderRows() {
+    const rows = [];
+    const specByKey = {
+      mdf: `${MDF_W}×${MDF_H}mm`,
+      gy: `${GY_W}×${GY_H}mm`,
+      jj: `${JJ_LEN}mm(길이)`,
+      tb: `${TB_W}×${TB_H}mm`,
+    };
     blocks.forEach((b, idx) => {
       const r = computeCarpentryBlock(b);
-      const qtyByKey = qtyByKeyFor(r);
-      lines.push("");
-      lines.push(`■ ${b.name || "공간 " + (idx + 1)}  (${b.width || "-"} × ${b.height || "-"} mm)`);
+      const qtyByKey = { mdf: r.mdfQty, gy: r.gyQty, jj: r.jjQty, tb: r.tbQty };
+      const location = b.name || `공간 ${idx + 1}`;
       CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).forEach((m) => {
-        const extra = m.key === "jj" ? `   [수직 ${r.vertical}개 + 상하 ${r.topBottom}개]` : "";
-        lines.push(`  ${m.label.padEnd(13, " ")}: ${qtyByKey[m.key]} ${m.unit}${extra}`);
+        if (qtyByKey[m.key] <= 0) return;
+        rows.push({
+          name: m.label,
+          spec: specByKey[m.key],
+          qty: `${qtyByKey[m.key]}${m.unit}`,
+          location,
+          note: m.key === "jj" ? `수직 ${r.vertical}개 + 상하 ${r.topBottom}개` : "",
+        });
       });
     });
-    if (moldingBlocks.length) {
-      lines.push("");
-      lines.push("■ 걸레받이 / 몰딩");
-      moldingBlocks.forEach((b, idx) => {
-        const r = computeMoldingBlock(b);
-        lines.push(`  ${b.name || "구간 " + (idx + 1)} : ${r.qty} 개`);
-      });
-    }
-    lines.push("");
-    lines.push("─────────────────────────");
-    CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).forEach((m) => {
-      lines.push(`총 ${m.label.padEnd(13, " ")}: ${totals[m.key]} ${m.unit}`);
+    moldingBlocks.forEach((b, idx) => {
+      const r = computeMoldingBlock(b);
+      if (r.qty <= 0) return;
+      rows.push({ name: "걸레받이/몰딩", spec: `${MOLD_LEN}mm(길이)`, qty: `${r.qty}개`, location: b.name || `구간 ${idx + 1}`, note: "" });
     });
-    lines.push(`총 걸레받이/몰딩  : ${totals.mold} 개`);
-    return lines.join("\n");
-  }
-  const orderText = showOrder ? buildOrderText() : "";
-  async function copyOrder() {
-    try {
-      await navigator.clipboard.writeText(orderText);
-      setHint("복사됨");
-    } catch (e) {
-      setHint("복사 실패 - 직접 선택해 복사해주세요");
-    }
-    setTimeout(() => setHint(""), 1500);
+    return rows;
   }
 
   return (
     <div>
-      <div className="flex items-start justify-between flex-wrap gap-3" style={{ marginBottom: 16 }}>
+      <div className="no-print flex items-start justify-between flex-wrap gap-3" style={{ marginBottom: 16 }}>
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center rounded-lg" style={{ width: 40, height: 40, background: COLORS.accentSoft, color: COLORS.accent }}>
             <Icon size={20} />
@@ -3283,6 +3355,8 @@ function CarpentryPanel({ data, onChange, onReset }) {
           <RotateCcw size={14} /> 초기화
         </button>
       </div>
+
+      <div className="no-print">
 
       <div className="rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 16, marginBottom: 16 }}>
         <h3 className="text-sm font-semibold" style={{ color: COLORS.ink, marginBottom: 10 }}>자재 규격 (고정값)</h3>
@@ -3358,15 +3432,9 @@ function CarpentryPanel({ data, onChange, onReset }) {
           발주서 작성
         </button>
       </div>
+      </div>
 
-      {showOrder && (
-        <div className="rounded-xl" style={{ marginTop: 18, background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 20 }}>
-          <h3 className="font-semibold" style={{ fontSize: 15, marginBottom: 10, color: COLORS.ink }}>발주서 요약</h3>
-          <pre className="mono" style={{ whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "14px 16px", color: COLORS.ink }}>{orderText}</pre>
-          <button onClick={copyOrder} className="rounded-lg text-sm font-bold" style={{ marginTop: 10, padding: "8px 16px", border: "none", background: COLORS.success, color: "#fff" }}>복사하기</button>
-          <span className="text-xs" style={{ marginLeft: 10, color: COLORS.inkSoft }}>{hint}</span>
-        </div>
-      )}
+      {showOrder && <OrderFormSheet rows={buildOrderRows()} onClose={() => setShowOrder(false)} />}
     </div>
   );
 }
@@ -3515,51 +3583,31 @@ function WallpaperPanel({ data, onChange, onReset }) {
   const blocks = data.blocks && data.blocks.length ? data.blocks : [defaultWallpaperBlock()];
   const grandTotal = wallpaperGrandTotal(data);
   const [showOrder, setShowOrder] = useState(false);
-  const [hint, setHint] = useState("");
 
   function updateBlock(id, next) { onChange((prev) => ({ ...prev, blocks: prev.blocks.map((b) => (b.id === id ? next : b)) })); }
   function addBlock() { onChange((prev) => ({ ...prev, blocks: [...prev.blocks, defaultWallpaperBlock()] })); }
   function removeBlock(id) { onChange((prev) => (prev.blocks.length <= 1 ? prev : { ...prev, blocks: prev.blocks.filter((b) => b.id !== id) })); }
 
-  function buildOrderText() {
-    const lines = [];
-    lines.push("벽지 발주서");
-    lines.push("작성일: " + new Date().toLocaleDateString("ko-KR"));
-    lines.push("─────────────────────────");
-    let grandRolls = 0;
-    blocks.forEach((b, idx) => {
-      const r = computeWallpaperBlock(b);
-      grandRolls += r.rolls;
-      lines.push("");
-      lines.push(`■ ${b.name || "벽지 " + (idx + 1)}  (${WALLPAPER_TYPE_LABELS[b.type] || b.type})`);
-      lines.push(`  규격: 폭 ${b.width || "-"}cm × 롤당 ${b.length || "-"}m   로스율 ${b.loss || 0}%`);
-      lines.push("  공간별 실측:");
-      (b.spaces || []).forEach((s) => {
-        const sr = computeWallpaperSpace(s);
-        const breakdown = `벽 ${sr.wallArea.toFixed(2)}${s.includeCeiling ? ` + 천장 ${sr.ceilArea.toFixed(2)}` : ""} = ${sr.rowTotal.toFixed(2)} ㎡`;
-        lines.push(`    - ${s.name || "(공간명 미입력)"} : ${breakdown}`);
-      });
-      lines.push(`  순 시공면적: ${r.net.toFixed(2)} ㎡   →   발주 수량: ${r.rolls} 롤`);
-    });
-    lines.push("");
-    lines.push("─────────────────────────");
-    lines.push(`총 발주 롤수: ${grandRolls} 롤`);
-    return lines.join("\n");
-  }
-  const orderText = showOrder ? buildOrderText() : "";
-  async function copyOrder() {
-    try {
-      await navigator.clipboard.writeText(orderText);
-      setHint("복사됨");
-    } catch (e) {
-      setHint("복사 실패 - 직접 선택해 복사해주세요");
-    }
-    setTimeout(() => setHint(""), 1500);
+  function buildOrderRows() {
+    return blocks
+      .map((b, idx) => {
+        const r = computeWallpaperBlock(b);
+        const spaceNames = (b.spaces || []).map((s) => s.name).filter(Boolean).join(", ");
+        return {
+          name: b.name || `벽지 ${idx + 1}`,
+          spec: `${WALLPAPER_TYPE_LABELS[b.type] || b.type} · 폭${b.width || "-"}cm×${b.length || "-"}m`,
+          qty: `${r.rolls}롤`,
+          location: spaceNames || `공간 ${idx + 1}`,
+          note: `로스율 ${b.loss || 0}%`,
+          rolls: r.rolls,
+        };
+      })
+      .filter((row) => row.rolls > 0);
   }
 
   return (
     <div>
-      <div className="flex items-start justify-between flex-wrap gap-3" style={{ marginBottom: 16 }}>
+      <div className="no-print flex items-start justify-between flex-wrap gap-3" style={{ marginBottom: 16 }}>
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center rounded-lg" style={{ width: 40, height: 40, background: COLORS.accentSoft, color: COLORS.accent }}>
             <Icon size={20} />
@@ -3574,6 +3622,7 @@ function WallpaperPanel({ data, onChange, onReset }) {
         </button>
       </div>
 
+      <div className="no-print">
       <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
         <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>벽지 종류별 산출</h3>
         <button onClick={addBlock} className="flex items-center gap-1 text-sm" style={{ color: COLORS.accent, background: "transparent" }}>
@@ -3593,15 +3642,9 @@ function WallpaperPanel({ data, onChange, onReset }) {
           발주서 작성
         </button>
       </div>
+      </div>
 
-      {showOrder && (
-        <div className="rounded-xl" style={{ marginTop: 18, background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: 20 }}>
-          <h3 className="font-semibold" style={{ fontSize: 15, marginBottom: 10, color: COLORS.ink }}>발주서 요약</h3>
-          <pre className="mono" style={{ whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "14px 16px", color: COLORS.ink }}>{orderText}</pre>
-          <button onClick={copyOrder} className="rounded-lg text-sm font-bold" style={{ marginTop: 10, padding: "8px 16px", border: "none", background: COLORS.success, color: "#fff" }}>복사하기</button>
-          <span className="text-xs" style={{ marginLeft: 10, color: COLORS.inkSoft }}>{hint}</span>
-        </div>
-      )}
+      {showOrder && <OrderFormSheet rows={buildOrderRows()} onClose={() => setShowOrder(false)} />}
     </div>
   );
 }
