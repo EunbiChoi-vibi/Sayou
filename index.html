@@ -3323,11 +3323,13 @@ function OrderFormSheet({ rows, onClose }) {
           </tbody>
         </table>
 
-        <div style={{ marginTop: 13, display: "flex", justifyContent: "flex-end" }}>
-          <div style={{ textAlign: "left", fontSize: 14, lineHeight: 1.7, color: "#222" }}>
-            <div>(주)사유공간</div>
-            <div>발주자 : <input value={meta.requester} onChange={(e) => set("requester", e.target.value)} placeholder="이름" style={{ ...inputStyle, width: 120 }} /></div>
-            <div>연락처 : <input value={meta.phone} onChange={(e) => set("phone", e.target.value)} placeholder="연락처" style={{ ...inputStyle, width: 140 }} /></div>
+        <div style={{ marginTop: 13 }}>
+          <div style={{ textAlign: "right", fontSize: 14, color: "#222" }}>(주)사유공간</div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ textAlign: "left", fontSize: 14, lineHeight: 1.7, color: "#222" }}>
+              <div>발주자 : <input value={meta.requester} onChange={(e) => set("requester", e.target.value)} placeholder="이름" style={{ ...inputStyle, width: 120 }} /></div>
+              <div>연락처 : <input value={meta.phone} onChange={(e) => set("phone", e.target.value)} placeholder="연락처" style={{ ...inputStyle, width: 140 }} /></div>
+            </div>
           </div>
         </div>
       </div>
