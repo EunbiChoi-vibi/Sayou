@@ -3281,11 +3281,10 @@ function OrderFormSheet({ rows, onClose }) {
             <col />
             <col />
             <col />
-            <col />
           </colgroup>
           <thead>
             <tr>
-              {["품 목", "치 수", "수 량", "위 치", "비 고"].map((h) => (
+              {["품 목", "치 수", "수 량", "비 고"].map((h) => (
                 <th key={h} style={{ border: "1px solid #333", padding: "10px 7px", background: "#FAFAF8", fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
@@ -3296,14 +3295,12 @@ function OrderFormSheet({ rows, onClose }) {
                 <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.name}</td>
                 <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.spec}</td>
                 <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.qty}</td>
-                <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.location}</td>
                 <td style={{ border: "1px solid #333", padding: "10px 7px", textAlign: "center" }}>{r.note}</td>
               </tr>
             ))}
             {Array.from({ length: padCount }).map((_, i) => (
               <tr key={`pad-${i}`}>
                 <td style={{ border: "1px solid #333", padding: "11px 7px" }}>&nbsp;</td>
-                <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
                 <td style={{ border: "1px solid #333" }}>&nbsp;</td>
@@ -3354,26 +3351,13 @@ function CarpentryPanel({ data, onChange, onReset }) {
       jj: `${JJ_LEN}mm(길이)`,
       tb: `${TB_W}×${TB_H}mm`,
     };
-    blocks.forEach((b, idx) => {
-      const r = computeCarpentryBlock(b);
-      const qtyByKey = { mdf: r.mdfQty, gy: r.gyQty, jj: r.jjQty, tb: r.tbQty };
-      const location = b.name || `공간 ${idx + 1}`;
-      CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).forEach((m) => {
-        if (qtyByKey[m.key] <= 0) return;
-        rows.push({
-          name: m.label,
-          spec: specByKey[m.key],
-          qty: `${qtyByKey[m.key]}${m.unit}`,
-          location,
-          note: m.key === "jj" ? `수직 ${r.vertical}개 + 상하 ${r.topBottom}개` : "",
-        });
-      });
+    CARPENTRY_MATERIAL_ORDER.filter((m) => enabled[m.key] !== false).forEach((m) => {
+      if (totals[m.key] <= 0) return;
+      rows.push({ name: m.label, spec: specByKey[m.key], qty: `${totals[m.key]}${m.unit}`, note: "" });
     });
-    moldingBlocks.forEach((b, idx) => {
-      const r = computeMoldingBlock(b);
-      if (r.qty <= 0) return;
-      rows.push({ name: "걸레받이/몰딩", spec: `${MOLD_LEN}mm(길이)`, qty: `${r.qty}개`, location: b.name || `구간 ${idx + 1}`, note: "" });
-    });
+    if (totals.mold > 0) {
+      rows.push({ name: "걸레받이/몰딩", spec: `${MOLD_LEN}mm(길이)`, qty: `${totals.mold}개`, note: "" });
+    }
     return rows;
   }
 
@@ -3630,12 +3614,10 @@ function WallpaperPanel({ data, onChange, onReset }) {
     return blocks
       .map((b, idx) => {
         const r = computeWallpaperBlock(b);
-        const spaceNames = (b.spaces || []).map((s) => s.name).filter(Boolean).join(", ");
         return {
           name: b.name || `벽지 ${idx + 1}`,
           spec: `${WALLPAPER_TYPE_LABELS[b.type] || b.type} · 폭${b.width || "-"}cm×${b.length || "-"}m`,
           qty: `${r.rolls}롤`,
-          location: spaceNames || `공간 ${idx + 1}`,
           note: `로스율 ${b.loss || 0}%`,
           rolls: r.rolls,
         };
@@ -3765,12 +3747,10 @@ function FilmPanel({ data, onChange, onReset }) {
     return blocks
       .map((b, idx) => {
         const r = computeFilmBlock(b);
-        const spaceNames = (b.spaces || []).map((s) => s.name).filter(Boolean).join(", ");
         return {
           name: b.name || `필름지 ${idx + 1}`,
           spec: "시공면적",
           qty: `${formatQty(r.m2)}㎡(${formatQty(r.pyeong)}평)`,
-          location: spaceNames || `공간 ${idx + 1}`,
           note: "",
           m2: r.m2,
         };
