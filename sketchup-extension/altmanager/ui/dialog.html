@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<title>Alt Manager</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="am-header">
+      <input id="topic-input" type="text" placeholder="새 Topic 이름 입력" maxlength="40" />
+      <button id="create-topic-btn" class="am-btn am-btn-primary">Create</button>
+    </header>
+
+    <main id="topic-list" class="am-topic-list">
+      <p class="am-empty" id="empty-msg">등록된 Topic이 없습니다.<br />위에서 새 Topic을 만들어보세요.</p>
+    </main>
+
+    <footer class="am-toolbar">
+      <button id="sync-camera-btn" class="am-btn" title="현재 카메라를 모든 Alt Scene에 동기화">Sync Camera</button>
+      <button id="delete-btn" class="am-btn am-btn-danger" title="선택된 Alt 또는 Topic 삭제">Delete</button>
+      <button id="finalize-btn" class="am-btn am-btn-primary" title="선택된 Alt만 남기고 정리">Finalize</button>
+    </footer>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
