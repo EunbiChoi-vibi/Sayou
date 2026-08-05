@@ -56,6 +56,31 @@ html, body {
   border-color: var(--am-accent);
 }
 
+/* ---- subheader (export/import) ---- */
+
+.am-subheader {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--am-panel);
+  border-bottom: 1px solid var(--am-border);
+}
+
+.am-link-btn {
+  border: none;
+  background: transparent;
+  color: var(--am-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.am-link-btn:hover {
+  color: var(--am-accent);
+  text-decoration: underline;
+}
+
 /* ---- topic list ---- */
 
 .am-topic-list {
@@ -114,41 +139,92 @@ html, body {
 .am-alts-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 8px;
   padding: 0 10px 10px 26px;
 }
 
-.am-alt-btn {
-  min-width: 30px;
-  padding: 5px 10px;
-  border: 1px solid var(--am-border);
-  border-radius: 4px;
-  background: var(--am-bg);
-  color: var(--am-text);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
+.am-alt-card {
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
 }
 
-.am-alt-btn:hover {
+.am-alt-thumb {
+  width: 64px;
+  height: 48px;
+  border: 2px solid var(--am-border);
+  border-radius: 4px;
+  background: var(--am-bg);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--am-text-muted);
+}
+
+.am-alt-thumb:hover {
   border-color: var(--am-accent);
 }
 
-.am-alt-btn.selected {
-  background: var(--am-selected-bg);
+.am-alt-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.am-alt-card.selected .am-alt-thumb {
   border-color: var(--am-selected-bg);
-  color: var(--am-selected-text);
+  box-shadow: 0 0 0 1px var(--am-selected-bg);
+}
+
+.am-alt-label {
+  max-width: 64px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
+.am-alt-card.selected .am-alt-label {
+  color: var(--am-selected-bg);
+}
+
+.am-alt-label:hover {
+  background: #eef3ff;
+}
+
+.am-alt-rename-input {
+  max-width: 64px;
+  width: 64px;
+  font-size: 11px;
+  text-align: center;
+  border: 1px solid var(--am-accent);
+  border-radius: 3px;
+  padding: 1px 2px;
 }
 
 .am-add-btn {
-  min-width: 28px;
-  padding: 5px 10px;
+  width: 64px;
+  height: 48px;
+  align-self: flex-start;
   border: 1px dashed var(--am-border);
   border-radius: 4px;
   background: transparent;
   color: var(--am-text-muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .am-add-btn:hover {

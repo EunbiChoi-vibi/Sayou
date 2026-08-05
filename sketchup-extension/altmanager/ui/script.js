@@ -112,18 +112,7 @@
     altsRow.className = 'am-alts-row';
 
     topic.alts.forEach(function (alt) {
-      var btn = document.createElement('button');
-      btn.className = 'am-alt-btn';
-      btn.textContent = alt.name;
-      if (state.current_selected_alt === alt.id) {
-        btn.classList.add('selected');
-      }
-      btn.title = alt.name + ' 로 전환';
-      btn.addEventListener('click', function () {
-        selection = { type: 'alt', id: alt.id };
-        window.sketchup.select_alt(String(alt.id));
-      });
-      altsRow.appendChild(btn);
+      altsRow.appendChild(buildAltCard(alt));
     });
 
     var addBtn = document.createElement('button');
@@ -136,6 +125,85 @@
     altsRow.appendChild(addBtn);
 
     return altsRow;
+  }
+
+  function buildAltCard(alt) {
+    var card = document.createElement('div');
+    card.className = 'am-alt-card';
+    if (state.current_selected_alt === alt.id) {
+      card.classList.add('selected');
+    }
+
+    var thumb = document.createElement('div');
+    thumb.className = 'am-alt-thumb';
+    thumb.title = (alt.display_name || alt.name) + ' 로 전환';
+    if (alt.thumbnail) {
+      var img = document.createElement('img');
+      img.src = alt.thumbnail;
+      img.alt = alt.display_name || alt.name;
+      thumb.appendChild(img);
+    } else {
+      thumb.textContent = alt.name;
+    }
+    thumb.addEventListener('click', function () {
+      selection = { type: 'alt', id: alt.id };
+      window.sketchup.select_alt(String(alt.id));
+    });
+    card.appendChild(thumb);
+
+    var label = document.createElement('div');
+    label.className = 'am-alt-label';
+    label.textContent = alt.display_name || alt.name;
+    label.title = '더블클릭해서 이름 바꾸기';
+    label.addEventListener('click', function () {
+      selection = { type: 'alt', id: alt.id };
+      window.sketchup.select_alt(String(alt.id));
+    });
+    label.addEventListener('dblclick', function (e) {
+      e.stopPropagation();
+      startRename(card, label, alt);
+    });
+    card.appendChild(label);
+
+    return card;
+  }
+
+  function startRename(card, label, alt) {
+    var input = document.createElement('input');
+    input.className = 'am-alt-rename-input';
+    input.type = 'text';
+    input.maxLength = 40;
+    input.value = alt.display_name || alt.name;
+
+    var done = false;
+    var commit = function () {
+      if (done) return;
+      done = true;
+      var value = input.value.trim();
+      if (value && value !== alt.display_name) {
+        window.sketchup.rename_alt(String(alt.id), value);
+      } else {
+        render(state);
+      }
+    };
+    var cancel = function () {
+      if (done) return;
+      done = true;
+      render(state);
+    };
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape') cancel();
+    });
+    input.addEventListener('blur', commit);
+    input.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+
+    card.replaceChild(input, label);
+    input.focus();
+    input.select();
   }
 
   function currentAltSelectionId() {
@@ -158,6 +226,16 @@
     window.sketchup.create_topic(name);
     input.value = '';
   }
+
+  // ---- Export / Import ----
+
+  byId('export-btn').addEventListener('click', function () {
+    window.sketchup.export_topics();
+  });
+
+  byId('import-btn').addEventListener('click', function () {
+    window.sketchup.import_topics();
+  });
 
   // ---- 하단 툴바 ----
 

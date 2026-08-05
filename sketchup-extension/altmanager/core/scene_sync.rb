@@ -1,5 +1,8 @@
 # Sayou Alt Manager - Sync Camera
 # 현재 뷰(카메라) 값을 등록된 모든 Alt Scene에 일괄 반영한다.
+#
+# 트랜잭션/저장은 main.rb의 run_op가 담당하므로 여기서는 순수하게
+# 카메라 값만 반영하고 결과 Hash를 반환한다.
 
 module SayouAltManager
   module SceneSync
@@ -9,22 +12,15 @@ module SayouAltManager
       model = Sketchup.active_model
       source_camera = model.active_view.camera
 
-      model.start_operation('Alt Manager - Sync Camera', true)
-      begin
-        data['topics'].each do |topic|
-          topic['alts'].each do |alt|
-            page = model.pages[alt['scene']]
-            next unless page
+      data['topics'].each do |topic|
+        topic['alts'].each do |alt|
+          page = model.pages[alt['scene']]
+          next unless page
 
-            page.camera = clone_camera(source_camera)
-          end
+          page.camera = clone_camera(source_camera)
         end
-        model.commit_operation
-        { 'ok' => true }
-      rescue StandardError => e
-        model.abort_operation
-        { 'ok' => false, 'error' => e.message }
       end
+      { 'ok' => true }
     end
 
     # 같은 Camera 인스턴스를 여러 Scene에 공유하면 한쪽을 바꿀 때 다른 Scene도
